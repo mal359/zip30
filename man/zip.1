@@ -13,7 +13,7 @@
 .\" 30 August 2007, 27 April 2008, 25 May 2008, 27 May 2008 by EG,
 .\" 7 June 2008 by SMS and EG; 12 June 2008 by EG)
 .\"
-.TH ZIP 1L "16 June 2008 (v3.0)" Info-ZIP
+.TH ZIP 1 "16 June 2008 (v3.0)" Info-ZIP
 .SH NAME
 zip \- package and compress (archive) files
 .SH SYNOPSIS
@@ -53,14 +53,14 @@ and
 and is compatible with PKZIP (Phil Katz's ZIP for MSDOS systems).
 .LP
 A companion program
-.RI ( unzip (1L))
+.RI ( unzip (1))
 unpacks
 .I zip
 archives.
 The
 .I zip
 and
-.IR unzip (1L)
+.IR unzip (1)
 programs can work with archives produced by PKZIP (supporting
 most PKZIP features up to PKZIP version 4.6),
 and PKZIP and PKUNZIP can work with archives produced by
@@ -297,7 +297,7 @@ used.
 If Zip64 support for large files and archives is enabled and
 \fIzip\fR is used as a filter, \fIzip\fR creates a Zip64 archive
 that requires a PKZIP 4.5 or later compatible unzip to read it.  This is
-to avoid amgibuities in the zip file structure as defined in the current
+to avoid ambiguities in the zip file structure as defined in the current
 zip standard (PKWARE AppNote) where the decision to use Zip64 needs to
 be made before data is written for the entry, but for a stream the size
 of the data is not known at that point.  If the data is known to be smaller
@@ -502,7 +502,7 @@ Long options take the form
 where the option starts with --, has a multicharacter name, can
 include a trailing dash to negate the option (if the option
 supports it), and can have a value (option argument) specified by
-preceeding it with = (no spaces).  Values can also follow the
+preceding it with = (no spaces).  Values can also follow the
 argument.  So
 .IP
 \fC--before-date=mmddyyyy\fP
@@ -2403,7 +2403,7 @@ deflation is controlled.
 .TP
 .PD
 .B \-\-use\-privileges
-[WIN32] Use priviliges (if granted) to obtain all aspects of WinNT security.
+[WIN32] Use privileges (if granted) to obtain all aspects of WinNT security.
 .TP
 .PD 0
 .B \-@
@@ -2661,10 +2661,10 @@ be added to the zip file with basename and extension swapped.
 [VMS] see ZIPOPT
 .SH "SEE ALSO"
 compress(1),
-shar(1L),
+shar(1),
 tar(1),
-unzip(1L),
-gzip(1L)
+unzip(1),
+gzip(1)
 .SH DIAGNOSTICS
 The exit status (or error level) approximates the exit codes defined by PKWARE
 and takes on the following values, except under VMS:
@@ -2756,7 +2756,7 @@ This version of
 .I zip
 handles some of the conversion internally.
 When using Kermit to transfer zip files from VMS to MSDOS, type "set
-file type block" on VMS.  When transfering from MSDOS to VMS, type
+file type block" on VMS.  When transferring from MSDOS to VMS, type
 "set file type fixed" on VMS.  In both cases, type "set file type
 binary" on MSDOS.
 .LP
@@ -2776,7 +2776,7 @@ EA sizes when DIRing a file.
 However, the structure layout returned by the 32-bit DosQueryPathInfo()
 is a bit different, it uses extra padding bytes and link pointers (it's
 a linked list) to have all fields on 4-byte boundaries for portability
-to future RISC OS/2 versions. Therefore the value reported by
+to future OS/2 versions. Therefore the value reported by
 .I zip
 (which uses this 32-bit-mode size) differs from that reported by DIR.
 .I zip

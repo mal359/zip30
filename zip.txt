@@ -184,7 +184,7 @@ USE
 
        If  Zip64  support  for  large files and archives is enabled and zip is
        used as a filter, zip creates a Zip64 archive that requires a PKZIP 4.5
-       or  later compatible unzip to read it.  This is to avoid amgibuities in
+       or  later compatible unzip to read it.  This is to avoid ambiguities in
        the zip file structure as defined in the current zip  standard  (PKWARE
        AppNote)  where  the decision to use Zip64 needs to be made before data
        is written for the entry, but for a stream the size of the data is  not
@@ -376,7 +376,7 @@ USE
 
        where the option starts with --, has a multicharacter name, can include
        a  trailing  dash to negate the option (if the option supports it), and
-       can have a value (option argument) specified by preceeding  it  with  =
+       can have a value (option argument) specified by preceding  it  with  =
        (no spaces).  Values can also follow the argument.  So
 
               --before-date=mmddyyyy
@@ -1696,7 +1696,7 @@ OPTIONS
 
        -!
        --use-privileges
-              [WIN32]  Use  priviliges  (if  granted) to obtain all aspects of
+              [WIN32]  Use  privileges  (if  granted) to obtain all aspects of
               WinNT security.
 
        -@
@@ -1957,7 +1957,7 @@ BUGS
        be converted using Rahul Dhesi's BILF program.   This  version  of  zip
        handles some of the conversion internally.  When using Kermit to trans-
        fer zip files from VMS to MSDOS, type "set file  type  block"  on  VMS.
-       When  transfering from MSDOS to VMS, type "set file type fixed" on VMS.
+       When transferring from MSDOS to VMS, type "set file type fixed" on VMS.
        In both cases, type "set file type binary" on MSDOS.
 
        Under some older VMS versions, zip may  hang  for  file  specifications
@@ -1974,7 +1974,7 @@ BUGS
        when  DIRing  a  file.   However,  the structure layout returned by the
        32-bit DosQueryPathInfo() is a bit different,  it  uses  extra  padding
        bytes  and  link  pointers  (it's  a linked list) to have all fields on
-       4-byte boundaries for portability to future RISC OS/2 versions.  There-
+       4-byte  boundaries  for  portability  to  future OS/2 versions.  There-
        fore  the value reported by zip (which uses this 32-bit-mode size) dif-
        fers from that reported by DIR.   zip  stores  the  32-bit  format  for
        portability, even the 16-bit MS-C-compiled version running on OS/2 1.3,

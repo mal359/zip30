@@ -423,7 +423,7 @@ ulg filetime(f, a, n, t)
     }
   }
   if (n != NULL)
-    *n = (s.st_mode & S_IFMT) == S_IFREG ? s.st_size : -1L;
+    *n = ((s.st_mode & S_IFMT) == S_IFREG || (s.st_mode & S_IFMT) == S_IFLNK) ? s.st_size : -1L;
   if (t != NULL) {
     t->atime = s.st_atime;
     t->mtime = s.st_mtime;
@@ -1020,7 +1020,7 @@ void version_local()
 
 
 /* Define the compile date string */
-#ifdef __DATE__
+#if 0
 #  define COMPILE_DATE " on " __DATE__
 #else
 #  define COMPILE_DATE ""

@@ -701,6 +701,21 @@ typedef struct ztimbuf {
 
 # endif /* WIN32 */
 
+#if defined(OS2)
+#if defined(__KLIBC__) 
+#   define zstat stat
+#   define zfstat fstat
+#   define zlstat lstat
+     /* 64-bit fseeko */
+#   define zfseeko fseeko
+     /* 64-bit ftello */
+#   define zftello ftello
+    /* 64-bit fopen */
+#   define zfopen fopen
+#   define zfdopen fdopen
+#endif
+#endif /* OS2 */
+
 #else
   /* No Large File Support or default for 64-bit environment */
 

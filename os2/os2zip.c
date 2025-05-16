@@ -20,6 +20,10 @@
 #  define __32BIT__
 #endif
 
+#if defined(__KLIBC__ )|| defined(__INNOTEK_LIBC__)
+#include <dirent.h>
+#endif
+
 #include "zip.h"
 
 #include <stdlib.h>
@@ -66,6 +70,7 @@
 
 #ifndef UTIL
 
+#ifndef __KLIBC__ 
 extern int noisy;
 
 #ifndef S_IFMT
@@ -270,6 +275,7 @@ static char *getdirent(char *dir)
     return NULL;
   }
 }
+#endif /* __KLIBC__ */
 
 /* FAT / HPFS detection */
 
@@ -360,7 +366,7 @@ ulg GetFileTime(char *name)
 
 void SetFileTime(char *path, ulg stamp)
 {
-  FILESTATUS fs;
+  FILESTATUS3 fs;
   USHORT fd, ft;
 
   if (DosQueryPathInfo(path, FIL_STANDARD, (PBYTE) &fs, sizeof(fs)))
@@ -387,7 +393,11 @@ char *getVolumeLabel(int drive, unsigned long *vtime, unsigned long *vmode,
 
   time(utim);
   *vtime = unix2dostime(utim);
+#ifndef __KLIBC__
   *vmode = _A_VOLID | _A_ARCHIVE;
+#else
+  *vmode = A_LABEL | A_ARCHIVE;
+#endif
 
   return (fi.vol.cch > 0) ? fi.vol.szVolLabel : NULL;
 }
@@ -1038,11 +1048,22 @@ int GetExtraTime(struct zlist far *z, iztimes *z_utim)
 
 int set_extra_field(struct zlist far *z, iztimes *z_utim)
 {
+  char szName[CCHMAXPATH];
+  struct stat s;
+
+  strcpy( szName, z->name);
+  // check if file is a symlink, query EAs from resolved file.
+  if (linkput == 0 && lstat(z->name, &s) == 0)
+  {
+    if ((s.st_mode & S_IFLNK) == S_IFLNK)
+      realpath( z->name, szName);
+  }
+  
   /* store EA data in local header, and size only in central headers */
-  GetEAs(z->name, &z->extra, &z->ext, &z->cextra, &z->cext);
+  GetEAs(szName, &z->extra, &z->ext, &z->cextra, &z->cext);
 
   /* store ACL data in local header, and size only in central headers */
-  GetACL(z->name, &z->extra, &z->ext, &z->cextra, &z->cext);
+  GetACL(szName, &z->extra, &z->ext, &z->cextra, &z->cext);
 
 #ifdef USE_EF_UT_TIME
   /* store extended time stamps in both headers */
@@ -1109,11 +1130,7 @@ void version_local()
     printf(CompiledWith,
 
 #ifdef __GNUC__
-#  ifdef __EMX__  /* __EMX__ is defined as "1" only (sigh) */
-      "emx+gcc ", __VERSION__,
-#  else
-      "gcc/2 ", __VERSION__,
-#  endif
+      "gcc ", __VERSION__,
 #elif defined(__IBMC__)
       "IBM ",
 #  if (__IBMC__ < 200)
@@ -1178,7 +1195,7 @@ void version_local()
       " (16-bit)",
 #  endif
 #else
-      " 2.x/3.x (32-bit)",
+      " (32-bit)",
 #endif
 
 #ifdef __DATE__
@@ -1209,5 +1226,29 @@ void version_local()
 #endif /* __TURBOC__ */
 
 } /* end function version_local() */
+
+int ClearArchiveBit(char *path)
+{
+    FILESTATUS3L fsts3l;
+    APIRET       rc;
+    ULONG        cbBuf = sizeof(FILESTATUS3L);
+    USHORT       nLength;
+    char         name[CCHMAXPATH];
+
+    strcpy(name, path);
+    nLength = strlen(name);
+    if (name[nLength - 1] == '/')
+    name[nLength - 1] = 0;
+
+    rc = DosQueryPathInfo(name, FIL_STANDARDL, &fsts3l, cbBuf);
+    if (rc != NO_ERROR)
+        return (0);
+
+    if (!(fsts3l.attrFile & FILE_ARCHIVED))
+        return (1);
+    fsts3l.attrFile &= ~FILE_ARCHIVED;
+    rc = DosSetPathInfo(name, FIL_STANDARDL, &fsts3l, cbBuf, 0);
+    return ((rc == NO_ERROR)? 1 : 0);
+}
 
 #endif /* OS2 */

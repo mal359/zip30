@@ -15,6 +15,13 @@
 #include <direct.h>
 #endif
 
+#ifdef __KLIBC__ // YD
+#include <dirent.h>
+#endif
+
+#define INCL_DOS
+#include <os2.h>
+
 /* Extra malloc() space in names for cutpath() */
 #define PAD 0
 #define PATH_END '/'
@@ -44,7 +51,165 @@ DIR *d;                 /* directory stream to read from */
   return e == NULL ? (char *) NULL : e->d_name;
 }
 
+#define ONENAMELEN 255
+
+local int wild_recurse(whole, wildtail)
+char *whole;
+char *wildtail;
+{
+    DIR *dir;
+    char *subwild, *name, *newwhole = NULL, *glue = NULL, plug = 0, plug2;
+    extent newlen;
+    int amatch = 0, e = ZE_MISS;
+
+    if (!isshexp(wildtail)) {
+#ifdef LARGE_FILE_SUPPORT         
+	z_stat s;        	/* dummy buffer for stat() */
+#else
+	struct stat s;          /* dummy buffer for stat() */
+#endif
+
+        if (!LSSTAT(whole, &s))                 /* file exists ? */
+            return procname(whole, 0);
+        else
+            return ZE_MISS;                     /* woops, no wildcards! */
+    }
+
+    /* back up thru path components till existing dir found */
+    do {
+        name = wildtail + strlen(wildtail) - 1;
+        for (;;)
+            if (name-- <= wildtail || *name == PATH_END) {
+                subwild = name + 1;
+                plug2 = *subwild;
+                *subwild = 0;
+                break;
+            }
+        if (glue)
+            *glue = plug;
+        glue = subwild;
+        plug = plug2;
+        dir = opendir(whole);
+    } while (!dir && subwild > wildtail);
+    wildtail = subwild;                 /* skip past non-wild components */
+
+    if ((subwild = MBSCHR(wildtail + 1, PATH_END)) != NULL) {
+        /* this "+ 1" dodges the   ^^^ hole left by *glue == 0 */
+        *(subwild++) = 0;               /* wildtail = one component pattern */
+        newlen = strlen(whole) + strlen(subwild) + (ONENAMELEN + 2);
+    } else
+        newlen = strlen(whole) + (ONENAMELEN + 1);
+    if (!dir || ((newwhole = malloc(newlen)) == NULL)) {
+        if (glue)
+            *glue = plug;
+        e = dir ? ZE_MEM : ZE_MISS;
+        goto ohforgetit;
+    }
+    strcpy(newwhole, whole);
+    newlen = strlen(newwhole);
+    if (glue)
+        *glue = plug;                           /* repair damage to whole */
+    if (!isshexp(wildtail)) {
+        e = ZE_MISS;                            /* non-wild name not found */
+        goto ohforgetit;
+    }
+
+    while ((name = readd(dir)) != NULL) {
+        if (strcmp(name, ".") && strcmp(name, "..") &&
+            MATCH(wildtail, name, 0)) {
+            strcpy(newwhole + newlen, name);
+            if (subwild) {
+                name = newwhole + strlen(newwhole);
+                *(name++) = PATH_END;
+                strcpy(name, subwild);
+                e = wild_recurse(newwhole, name);
+            } else
+                e = procname(newwhole, 0);
+            newwhole[newlen] = 0;
+            if (e == ZE_OK)
+                amatch = 1;
+            else if (e != ZE_MISS)
+                break;
+        }
+    }
+
+  ohforgetit:
+    if (dir) closedir(dir);
+    if (subwild) *--subwild = PATH_END;
+    if (newwhole) free(newwhole);
+    if (e == ZE_MISS && amatch)
+        e = ZE_OK;
+    return e;
+}
+
 int wild(w)
+char *w;                /* path/pattern to match */
+/* If not in exclude mode, expand the pattern based on the contents of the
+   file system.  Return an error code in the ZE_ class. */
+{
+    char *p;              /* path */
+    char *q;              /* diskless path */
+    int e;                /* result */
+	int r;                /* temporary variable */
+    char v[5];            /* space for device current directory */
+
+    if (volume_label == 1) {
+      if (w != NULL) {
+        volume_label = 2;
+        label = getVolumeLabel((w != NULL && isascii((uch)w[0]) && w[1] == ':')
+                             ? to_up(w[0]) : '\0',
+                             &label_time, &label_mode, &label_utim);
+        if (label != NULL)
+          (void)newname(label, 0, 0);
+      }
+      if (w == NULL || (isascii((uch)w[0]) && w[1] == ':' && w[2] == '\0'))
+        return ZE_OK;
+      /* "zip -$ foo a:" can be used to force drive name */
+    }
+    /* special handling of stdin request */
+    if (strcmp(w, "-") == 0)   /* if compressing stdin */
+        return newname(w, 0, 0);
+
+    /* Allocate and copy pattern, leaving room to add "./" if needed */
+    if ((p = malloc(strlen(w) + 3)) == NULL)
+        return ZE_MEM;
+	
+	/* if there is no drive or directory we need to add the current directory,
+       as else opendir() doesn't work */
+    if (strrchr(w, '/') == NULL && strrchr(w, ':') == NULL)
+        strcat(strcpy(p, "./"), w);
+    else
+        strcpy(p, w);
+
+    /* catch special case: treat "*.*" as "*" for DOS-impaired people */
+    r = strlen(p);
+    if (strcmp(p + r - 3, "*.*") == 0)
+        p[r - 2] = '\0';
+
+    /* Normalize path delimiter as '/' */
+    for (q = p; *q; INCSTR(q))            /* use / consistently */
+        if (*q == '\\')
+            *q = '/';
+
+    /* Separate the disk part of the path */
+    if ((q = MBSCHR(p, ':')) != NULL) {
+        if (MBSCHR(++q, ':'))     /* sanity check for safety of wild_recurse */
+            return ZE_MISS;
+    } else
+        q = p;
+
+    /* Normalize bare disk names */
+    if (q > p && !*q)
+        strcpy(q, ".");
+
+    /* Here we go */
+    e = wild_recurse(p, q);
+    free((zvoid *)p);
+    return e;
+}
+
+#if 0
+int wild_os2(w)
 char *w;                /* path/pattern to match */
 /* If not in exclude mode, expand the pattern based on the contents of the
    file system.  Return an error code in the ZE_ class. */
@@ -182,6 +347,7 @@ char *w;                /* path/pattern to match */
   free((zvoid *)a);
   return f ? ZE_OK : ZE_MISS;
 }
+#endif
 
 int procname(n, caseflag)
 char *n;                /* name to process */
@@ -194,7 +360,11 @@ int caseflag;           /* true to force case-sensitive match */
   char *e;              /* pointer to name from readd() */
   int m;                /* matched flag */
   char *p;              /* path for recursion */
+#ifdef LARGE_FILE_SUPPORT         
+  z_stat s;        /* result of stat() */
+#else
   struct stat s;        /* result of stat() */
+#endif
   struct zlist far *z;  /* steps through zfiles list */
 
   if (n == NULL)        /* volume_label request in freshen|delete mode ?? */
@@ -232,9 +402,17 @@ int caseflag;           /* true to force case-sensitive match */
       *p = '/';
   if ((s.st_mode & S_IFDIR) == 0)
   {
-    /* add or remove name of file */
-    if ((m = newname(n, 0, caseflag)) != ZE_OK)
-      return m;
+    /* add exclusions in directory recurse but ignored for single file */
+    int dwAttr = GetFileMode(n);
+
+    if ((hidden_files ||
+         !(dwAttr & FILE_HIDDEN || dwAttr & FILE_SYSTEM)) &&
+        (!only_archive_set || (dwAttr & FILE_ARCHIVED)))
+    {
+      /* add or remove name of file */
+      if ((m = newname(n, 0, caseflag)) != ZE_OK)
+        return m;
+    }
   } else {
     /* Add trailing / to the directory name */
     if ((p = malloc(strlen(n)+2)) == NULL)
@@ -372,7 +550,11 @@ ulg d;                  /* dos-style time to change it to */
 ulg filetime(f, a, n, t)
 char *f;                /* name of file to get info on */
 ulg *a;                 /* return value: file attributes */
+#ifdef __KLIBC__
+long long *n;           /* return value: file size */
+#else
 long *n;                /* return value: file size */
+#endif
 iztimes *t;             /* return value: access, modific. and creation times */
 /* If file *f does not exist, return 0.  Else, return the file's last
    modified date and time as an MSDOS date and time.  The date and
@@ -386,7 +568,11 @@ iztimes *t;             /* return value: access, modific. and creation times */
    If f is "-", use standard input as the file. If f is a device, return
    a file size of -1 */
 {
+#ifdef LARGE_FILE_SUPPORT
+  z_stat s;        /* results of stat() */
+#else
   struct stat s;        /* results of stat() */
+#endif
   char *name;
   ulg r;
   unsigned int len = strlen(f);
@@ -413,7 +599,11 @@ iztimes *t;             /* return value: access, modific. and creation times */
   if (isstdin) {
     /* it is common for some PC based compilers to
        fail with fstat() on devices or pipes */
+#ifdef LARGE_FILE_SUPPORT
+    if (zfstat(fileno(stdin), &s) != 0) {
+#else
     if (fstat(fileno(stdin), &s) != 0) {
+#endif
       s.st_mode = S_IFREG; s.st_size = -1L;
     }
     time(&s.st_ctime);

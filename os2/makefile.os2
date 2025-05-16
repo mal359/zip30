@@ -14,6 +14,7 @@
 
 # Supported 32-bit C Compilers (created programs run under OS/2 2.x only):
 # - GNU gcc (emx kit 0.9c or newer)
+# - GNU gcc (klibc 0.6.3 or higher )
 # - IBM C Set/2 or C Set++   - does not yet work with ASM code
 # - Watcom C/C++ 32-bit      - does not yet work with ASM code
 # - Borland C++              - no ASM code yet
@@ -91,7 +92,7 @@ default:
 	@echo "where target is one of:"
 	@echo "   msc mscdos ibm ibmdyn ibmdebug ibmprof metaware borland"
 	@echo "   gcc gccdyn gcczlib gccdebug gccdos gccwin32 gccw32dyn"
-	@echo "   watcom watcom16 watcomdos watcom16dos pmodew"
+	@echo "   klibc watcom watcom16 watcomdos watcom16dos pmodew"
 
 # MS C 6.00 for OS/2, 16-bit
 msc:
@@ -311,6 +312,21 @@ borland:
 	OBJ=".obj" \
 	OBJA="" \
 	DEF="-sDos2/zip.def"
+	
+# klibc 0.6.3, gcc, OMF format, dynamically linked C runtime 
+klibc:
+	$(MAKE) -f os2/makefile.os2 zips \
+	CC="gcc" \
+	CFLAGS=" -Wimplicit -DOS2 $(CFLAGS)" \
+	AS="gcc -Zomf" \
+	ASFLAGS="-Di386" \
+	LDFLAGS="-o ./" \
+	LDFLAGS2="-Zomf -Zargs-resp $(LDFLAGS) -lcx" \
+	OUT="-o" \
+	OBJ=".o" \
+	CRC32="crc_gcc" \
+	OBJA="matchgcc.o" \
+	DEF="os2/zip.def"
 
 # emx 0.9c, gcc, OMF format, statically linked C runtime and emx
 gcc:
@@ -469,7 +485,9 @@ ZIP_H = zip.h ziperr.h tailor.h $(OSDEP_H)
 
 # targets
 
-zips:	zip.exe zipnote.exe zipsplit.exe zipcloak.exe
+ZIPS_BINARY = zip.exe zipnote.exe zipsplit.exe zipcloak.exe
+
+zips: $(ZIPS_BINARY)
 
 zip$(OBJ):	zip.c $(ZIP_H) revision.h crc32.h crypt.h ttyio.h
 zipfile$(OBJ):	zipfile.c $(ZIP_H) crc32.h
@@ -561,3 +579,32 @@ zipnote.exe: $(OBJN)
 
 zipsplit.exe: $(OBJS)
 	$(CC) $(LDFLAGS)$@ $(DEF) $(OBJS) $(LDFLAGS2)
+
+# install
+.PHONY: install
+
+INSTALL_PROGRAM = cp
+INSTALL_D = mkdir.exe -p
+CHMOD = chmod
+BINFLAGS = 755
+MANFLAGS = 644
+
+# target directories - where to install executables and man pages to
+prefix = /usr/local
+BINDIR = $(prefix)/bin
+MANEXT=1
+MANDIR = $(prefix)/man/man$(MANEXT)
+
+install:        $(ZIPS)
+	-$(INSTALL_D) $(BINDIR)
+	$(INSTALL_PROGRAM) $(ZIPS_BINARY) $(BINDIR)
+	-cd $(BINDIR); $(CHMOD) $(BINFLAGS) $(ZIPS_BINARY)
+	-$(INSTALL_D) $(MANDIR)
+	$(INSTALL_PROGRAM) man/zip.1 $(MANDIR)/zip.$(MANEXT)
+	$(CHMOD) $(MANFLAGS) $(MANDIR)/zip.$(MANEXT)
+	$(INSTALL_PROGRAM) man/zipcloak.1 $(MANDIR)/zipcloak.$(MANEXT)
+	$(CHMOD) $(MANFLAGS) $(MANDIR)/zipcloak.$(MANEXT)
+	$(INSTALL_PROGRAM) man/zipnote.1 $(MANDIR)/zipnote.$(MANEXT)
+	$(CHMOD) $(MANFLAGS) $(MANDIR)/zipnote.$(MANEXT)
+	$(INSTALL_PROGRAM) man/zipsplit.1 $(MANDIR)/zipsplit.$(MANEXT)
+	$(CHMOD) $(MANFLAGS) $(MANDIR)/zipsplit.$(MANEXT)

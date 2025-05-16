@@ -33,6 +33,15 @@
 #  define MEMORY16
 #endif
 
+#if defined(__KLIBC__) 
+#   define LARGE_FILE_SUPPORT 
+#   define ZIP64_SUPPORT 1
+    typedef long long           zoff_t;
+    typedef unsigned long long  uzoff_t;
+    typedef struct stat z_stat;
+# define ZOFF_T_FORMAT_SIZE_PREFIX "ll"
+#endif
+
 #ifndef NO_ASM
 #  define ASMV
 /* #  define ASM_CRC */

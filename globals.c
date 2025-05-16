@@ -98,7 +98,7 @@ int volume_label = 0;         /* add volume label */
 int dirnames = 1;             /* include directory entries by default */
 int filter_match_case = 1;    /* 1=match case when filter() */
 int diff_mode = 0;            /* 1=require --out and only store changed and add */
-#if defined(WIN32)
+#if defined(WIN32) || defined(OS2)
 int only_archive_set = 0;     /* include only files with DOS archive bit set */
 int clear_archive_bits = 0;   /* clear DOS archive bit of included files */
 #endif

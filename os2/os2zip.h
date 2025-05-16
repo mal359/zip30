@@ -10,6 +10,7 @@
  *  Placed into the public domain
  */
 
+#ifndef __KLIBC__
 
 #define MAXNAMLEN  256
 #define MAXPATHLEN 256
@@ -65,6 +66,7 @@ extern void seekdir(DIR *, long);
 extern long telldir(DIR *);
 extern void closedir(DIR *);
 #define rewinddir(dirp) seekdir(dirp, 0L)
+#endif /* __KLIBC__ */
 
 int GetFileMode(char *name);
 ulg GetFileTime(char *name);
@@ -75,6 +77,8 @@ char *getVolumeLabel(int drive, unsigned long *time, unsigned long *mode,
 int IsFileNameValid(char *name);
 int IsFileSystemFAT(char *dir);
 void ChangeNameForFAT(char *name);
+
+int ClearArchiveBit(char *path);
 
 char *GetLongNameEA(const char *name);
 char *GetLongPathEA(const char *name);

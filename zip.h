@@ -431,7 +431,7 @@ extern int volume_label;        /* add volume label */
 extern int dirnames;            /* include directory names */
 extern int filter_match_case;   /* 1=match case when filter() */
 extern int diff_mode;           /* 1=require --out and only store changed and add */
-#if defined(WIN32)
+#if defined(WIN32) || defined(OS2)
 extern int only_archive_set;    /* only include if DOS archive bit set */
 extern int clear_archive_bits;   /* clear DOS archive bit of included files */
 #endif
@@ -861,6 +861,13 @@ void     bi_init      OF((char *, unsigned int, int));
    update_local_Zip64_extra_field OF((struct zlist far *, FILE *));
 #endif
 */
+
+/*---------------------------------------------------------------------------
++    OS2-only functions:
++  ---------------------------------------------------------------------------*/
+#ifdef OS2
+   int ClearArchiveBit    OF((char *));                       /* os2zip.c */
+#endif
 
 /*---------------------------------------------------------------------------
     WIN32-only functions:

@@ -959,7 +959,7 @@ local void help_extended()
 "  in new diff.zip.  Output archive not excluded automatically if exists,",
 "  so either use -x to exclude it or put outside what is being zipped.",
 "",
-"DOS Archive bit (Windows only):",
+"DOS Archive bit (Windows and OS/2 only):",
 "  -AS       include only files with the DOS Archive bit set",
 "  -AC       after archive created, clear archive bit of included files",
 "      WARNING: Once the archive bits are cleared they are cleared",
@@ -1978,7 +1978,7 @@ struct option_struct far options[] = {
     {"8",  "compress-8",  o_NO_VALUE,       o_NOT_NEGATABLE, '8',  "compress 8"},
     {"9",  "compress-9",  o_NO_VALUE,       o_NOT_NEGATABLE, '9',  "compress 9"},
     {"A",  "adjust-sfx",  o_NO_VALUE,       o_NOT_NEGATABLE, 'A',  "adjust self extractor offsets"},
-#if defined(WIN32)
+#if defined(WIN32) || defined(OS2)
     {"AC", "archive-clear", o_NO_VALUE,     o_NOT_NEGATABLE, o_AC, "clear DOS archive bit of included files"},
     {"AS", "archive-set", o_NO_VALUE,       o_NOT_NEGATABLE, o_AS, "include only files with archive bit set"},
 #endif
@@ -2349,7 +2349,7 @@ char **argv;            /* command line tokens */
   hidden_files = 0;       /* process hidden and system files */
   volume_label = 0;       /* add volume label */
   dirnames = 1;           /* include directory entries by default */
-#if defined(WIN32)
+#if defined(WIN32) || defined(OS2)
   only_archive_set = 0;   /* only include if DOS archive bit set */
   clear_archive_bits = 0; /* clear DOS archive bit of included files */
 #endif
@@ -2677,7 +2677,7 @@ char **argv;            /* command line tokens */
           level = (int)option - '0';  break;
         case 'A':   /* Adjust unzipsfx'd zipfile:  adjust offsets only */
           adjust = 1; break;
-#if defined(WIN32)
+#if defined(WIN32) || defined(OS2)
         case o_AC:
           clear_archive_bits = 1; break;
         case o_AS:
@@ -5990,7 +5990,7 @@ char **argv;            /* command line tokens */
     set_filetype(out_path);
   }
 
-#if defined(WIN32)
+#if defined(WIN32) || defined(OS2)
   /* All looks good so, if requested, clear the DOS archive bits */
   if (clear_archive_bits) {
     if (noisy)

@@ -738,7 +738,8 @@ char *d;                /* directory to delete */
 /******************************/
 
 #if defined(__NetBSD__) || defined(__FreeBSD__) || defined(__386BSD__) || \
-    defined(__OpenBSD__) || defined(__bsdi__)
+    defined(__OpenBSD__) || defined(__bsdi__) || defined(__DragonFly__) || \
+	defined(__MidnightBSD__)
 #include <sys/param.h> /* for the BSD define */
 /* if we have something newer than NET/2 we'll use uname(3) */
 #if (BSD > 199103)
@@ -920,29 +921,30 @@ void version_local()
     sprintf(os_name, "%s %s", u.sysname, u.release);
 # else
 # ifdef __NetBSD__
-#   define OS_NAME os_name
-#   ifdef NetBSD0_8
-      sprintf(os_name, "NetBSD 0.8%s", netbsd[NetBSD0_8]);
-#   else
-#   ifdef NetBSD0_9
-      sprintf(os_name, "NetBSD 0.9%s", netbsd[NetBSD0_9]);
-#   else
-#   ifdef NetBSD1_0
-      sprintf(os_name, "NetBSD 1.0%s", netbsd[NetBSD1_0]);
-#   endif /* NetBSD1_0 */
-#   endif /* NetBSD0_9 */
-#   endif /* NetBSD0_8 */
+#    define OS_NAME "NetBSD"
 # else
 # ifdef __FreeBSD__
-#    define OS_NAME "FreeBSD 1.x"
+#    define OS_NAME "FreeBSD"
 # else
 # ifdef __bsdi__
-#    define OS_NAME "BSD/386 1.0"
+#    define OS_NAME "BSD/386"
 # else
 # ifdef __386BSD__
 #    define OS_NAME "386BSD"
 # else
+# ifdef __OpenBSD__
+#    define OS_NAME "OpenBSD"
+# else
+# ifdef __DragonFly__
+#    define OS_NAME "DragonFly BSD"
+# else
+# ifdef __MidnightBSD__
+#    define OS_NAME "MidnightBSD"
+# else
 #    define OS_NAME "Unknown BSD"
+# endif /* __MidnightBSD__ */
+# endif /* __DragonFly__ */
+# endif /* __OpenBSD__ */
 # endif /* __386BSD__ */
 # endif /* __bsdi__ */
 # endif /* FreeBSD */
@@ -1003,7 +1005,15 @@ void version_local()
 #      ifdef __ppc64__
 #        define OS_NAME "Mac OS X PowerPC64"
 #      else /* __ppc64__ */
-#        define OS_NAME "Mac OS X"
+#        ifdef __x86_64__
+#          define OS_NAME "macOS 64-bit Intel"
+#        else /* __x86_64__ */
+#          ifdef __aarch64__
+#            define OS_NAME "macOS Apple Silicon"
+#          else /* __aarch64__ */
+#            define OS_NAME "One sour Apple"
+#          endif /* __aarch64__ */
+#        endif /* __x86_64__ */
 #      endif /* __ppc64__ */
 #    endif /* __ppc__ */
 #  endif /* __i386__ */

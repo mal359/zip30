@@ -1255,7 +1255,7 @@ void version_local()
 #endif
 
     printf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
-           "\nWindows 9x / Windows NT", " (32-bit)", COMPILE_DATE);
+           "\nWindows", " (32-bit)", COMPILE_DATE);
 
     return;
 

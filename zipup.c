@@ -1175,7 +1175,12 @@ local unsigned file_read(buf, size)
 #endif /* MMAP || BIG_MEM */
   if (translate_eol == 0) {
     len = zread(ifile, buf, size);
-    if (len == (unsigned)EOF || len == 0) return len;
+    if (len == 0) return 0;      /* EOF */
+    if (len == (unsigned)-1) {   /* read error */
+       perror("\nzip warning");
+       zipwarn("read error","");
+       return 0;
+       }
 #ifdef OS390
     b = buf;
     if (aflag == ASCII) {
@@ -1191,7 +1196,12 @@ local unsigned file_read(buf, size)
     size >>= 1;
     b = buf+size;
     size = len = zread(ifile, b, size);
-    if (len == (unsigned)EOF || len == 0) return len;
+    if (len == 0) return 0;      /* EOF */
+    if (len == (unsigned)-1) {   /* read error */
+       perror("\nzip warning");
+       zipwarn("read error","");
+       return 0;
+       }
 
     /* check buf for binary - 12/16/04 */
     if (file_binary == -1) {

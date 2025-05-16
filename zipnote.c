@@ -575,6 +575,13 @@ char **argv;            /* command line tokens */
       strcpy(z->iname, a+2);
 #endif
 
+#ifdef UNICODE_SUPPORT
+#define UTF8_BIT (1 << 11)
+      if (using_utf8) {
+        z->uname = z->iname;
+      }
+#endif
+
 /*
  * Don't update z->nam here, we need the old value a little later.....
  * The update is handled in zipcopy().

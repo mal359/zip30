@@ -56,6 +56,9 @@ extern int errno;
 int rename OF((ZCONST char *, ZCONST char *));
 #endif
 
+#ifdef __ANDROID__
+int wctomb(char *s, wchar_t wc) { return wcrtomb(s,wc,NULL); }
+#endif
 
 /* Local functions */
 local int optionerr OF((char *, ZCONST char *, int, int));
@@ -696,6 +699,7 @@ int newnamew(namew, isdir, casesensitive)
         return ZE_MEM;
       }
       strcpy(z->name, name);
+      if (z->oname) free(z->oname);
       z->oname = oname;
       oname = NULL;
       z->dosflag = dosflag;
@@ -959,6 +963,7 @@ int newname(name, isdir, casesensitive)
         return ZE_MEM;
       }
       strcpy(z->name, name);
+      if (z->oname) free(z->oname);
       z->oname = oname;
       z->dosflag = dosflag;
 
@@ -1114,6 +1119,9 @@ ulg a;                  /* Attributes returned by filetime() */
 /* Return true if the attributes are those of a symbolic link */
 {
 #ifndef QDOS
+#ifdef S_ISLNK
+  return S_ISLNK(a >> 16);
+#else
 #ifdef S_IFLNK
 #ifdef __human68k__
   int *_dos_importlnenv(void);
@@ -1125,6 +1133,7 @@ ulg a;                  /* Attributes returned by filetime() */
 #else /* !S_IFLNK */
   return (int)a & 0;    /* avoid warning on unused parameter */
 #endif /* ?S_IFLNK */
+#endif /* ?S_ISLNK */
 #else
   return 0;
 #endif
@@ -1490,6 +1499,13 @@ char *tempname(zip)
   strcat(t, "ziXXXXXX"); /* must use lowercase for Linux dos file system */
 #     if defined(UNIX) && !defined(NO_MKSTEMP)
   /* tempname should not be called */
+  {
+    int fd;
+
+    if ((fd = mkstemp(t)) < 0)
+      return NULL;
+    close(fd);
+  }
   return t;
 #     else
   return mktemp(t);
@@ -2117,7 +2133,8 @@ int ask_for_split_read_path(current_disk)
       }
     }
     fflush(mesg);
-    fgets(buf, SPLIT_MAXPATH, stdin);
+    if (fgets(buf, SPLIT_MAXPATH, stdin) == NULL)
+        return ZE_ABORT;
     /* remove any newline */
     for (i = 0; buf[i]; i++) {
       if (buf[i] == '\n') {
@@ -2899,7 +2916,7 @@ local int utf8_char_bytes(utf8)
  * up to the current 21-bit mappings) changed this to signed to allow -1 to
  * be returned.
  */
-long ucs4_char_from_utf8(utf8)
+local long ucs4_char_from_utf8(utf8)
   ZCONST char **utf8;
 {
   ulg  ret;

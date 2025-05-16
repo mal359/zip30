@@ -744,6 +744,28 @@ struct option_struct far options[] = {
 
 int main OF((void));
 
+void zipmessage_nl(a, nl)
+ZCONST char *a;
+int nl;
+{
+}
+
+void zipmessage(a, b)
+ZCONST char *a, *b;
+{
+}
+
+int set_filetype(out_path)
+  char *out_path;
+{
+}
+
+int rename_split(temp_name, out_path)
+  char *temp_name;
+  char *out_path;
+{
+}
+
 void zipwarn(msg1, msg2)
 ZCONST char  *msg1, *msg2;
 {

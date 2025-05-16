@@ -76,7 +76,13 @@ _EOF_
     $CC $CFLAGS -c conftest.c > /dev/null 2>/dev/null
     if test $? -eq 0; then
       # HP-UX, not GCC.  Lame bundled or real ANSI compiler?
-      CFLAGS_OPT_TRY="+O3 +Onolimit"
+      CFLAGS_OPT_TRY="+O3 +Onolimit -DNO_MKSTEMP"
+      if [ "`uname -m`" = "ia64" ]
+      then
+         export CFLAGS="$CFLAGS +DD64"
+         export LFLAGS1="$LDFLAGS1 +DD64"
+         export LFLAGS2="$LDFLAGS2 +DD64"
+      fi
       $CC $CFLAGS $CFLAGS_OPT_TRY -c conftest.c 2>&1 | \
        grep '(Bundled)' > /dev/null
       if test $? -ne 0; then

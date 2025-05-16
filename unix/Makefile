@@ -202,7 +202,7 @@ generic: flags
 	eval $(MAKE) $(MAKEF) zips `cat flags`
 
 generic_gcc:
-	$(MAKE) $(MAKEF) generic CC=gcc CPP="gcc -E"
+	$(MAKE) $(MAKEF) generic CC="gcc -std=gnu89" CPP="gcc -E"
 
 # AT&T 6300 PLUS (don't know yet how to allocate 64K bytes):
 att6300nodir:

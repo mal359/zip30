@@ -92,6 +92,11 @@ DIR *dirp;
 #define closedir(dirp) fclose(dirp)
 #endif /* NO_DIR */
 
+#ifdef NO_SCANDIR
+/* TODO Port the FreeBSD libc version */
+#error "We need scandir now."
+#endif
+
 
 local char *readd(d)
 DIR *d;                 /* directory stream to read from */
@@ -111,12 +116,14 @@ int caseflag;           /* true to force case-sensitive match */
    an error code in the ZE_ class. */
 {
   char *a;              /* path and name for recursion */
-  DIR *d;               /* directory stream from opendir() */
-  char *e;              /* pointer to name from readd() */
+  char *e;              /* pointer to name from scandir() */
+  int c;                /* number of entries from scandir() */
+  int i;                /* entry index */
   int m;                /* matched flag */
   char *p;              /* path for recursion */
   z_stat s;             /* result of stat() */
   struct zlist far *z;  /* steps through zfiles list */
+  struct dirent **namelist;
 
   if (strcmp(n, "-") == 0)   /* if compressing stdin */
     return newname(n, 0, caseflag);
@@ -140,7 +147,7 @@ int caseflag;           /* true to force case-sensitive match */
   }
 
   /* Live name--use if file, recurse if directory */
-#ifdef OS390
+#if defined(S_ISREG) && defined(S_ISLINK)
   if (S_ISREG(s.st_mode) || S_ISLNK(s.st_mode))
 #else
 #  ifdef S_IFLNK
@@ -154,7 +161,7 @@ int caseflag;           /* true to force case-sensitive match */
     if ((m = newname(n, 0, caseflag)) != ZE_OK)
       return m;
   }
-#ifdef OS390
+#ifdef S_ISDIR
   else if (S_ISDIR(s.st_mode))
 #else
   else if ((s.st_mode & S_IFDIR) == S_IFDIR)
@@ -176,14 +183,16 @@ int caseflag;           /* true to force case-sensitive match */
       }
     }
     /* recurse into directory */
-    if (recurse && (d = opendir(n)) != NULL)
+    if (recurse && (c = scandir(n, &namelist, NULL, alphasort)) >= 0)
     {
-      while ((e = readd(d)) != NULL) {
+      for (i = 0; i < c; i++) {
+        e = namelist[i]->d_name;
         if (strcmp(e, ".") && strcmp(e, ".."))
         {
           if ((a = malloc(strlen(p) + strlen(e) + 1)) == NULL)
           {
-            closedir(d);
+            for (; i < c; i++) free(namelist[i]);
+            free(namelist);
             free((zvoid *)p);
             return ZE_MEM;
           }
@@ -197,12 +206,13 @@ int caseflag;           /* true to force case-sensitive match */
           }
           free((zvoid *)a);
         }
+        free(namelist[i]);
       }
-      closedir(d);
+      free(namelist);
     }
     free((zvoid *)p);
   } /* (s.st_mode & S_IFDIR) */
-#ifdef OS390
+#ifdef S_ISFIFO
   else if (S_ISFIFO(s.st_mode))
 #else
   else if ((s.st_mode & S_IFIFO) == S_IFIFO)
@@ -344,7 +354,7 @@ ulg filetime(f, a, n, t)
   z_stat s;         /* results of stat() */
   /* converted to pointer from using FNMAX - 11/8/04 EG */
   char *name;
-  int len = strlen(f);
+  size_t len = strlen(f);
 
   if (f == label) {
     if (a != NULL)
@@ -418,12 +428,20 @@ ulg filetime(f, a, n, t)
     *a = ((ulg)legacy_modes << 16) | !(s.st_mode & S_IWRITE);
     }
 #endif
+#ifdef S_ISDIR
+    if (S_ISDIR(s.st_mode)) {
+#else
     if ((s.st_mode & S_IFMT) == S_IFDIR) {
+#endif
       *a |= MSDOS_DIR_ATTR;
     }
   }
   if (n != NULL)
+#ifdef S_ISREG
+    *n = S_ISREG(s.st_mode) ? s.st_size : -1L;
+#else
     *n = ((s.st_mode & S_IFMT) == S_IFREG || (s.st_mode & S_IFMT) == S_IFLNK) ? s.st_size : -1L;
+#endif
   if (t != NULL) {
     t->atime = s.st_atime;
     t->mtime = s.st_mtime;
@@ -570,7 +588,7 @@ int set_extra_field(z, z_utim)
 {
   z_stat s;
   char *name;
-  int len = strlen(z->name);
+  size_t len = strlen(z->name);
 
   /* For the full sized UT local field including the UID/GID fields, we
    * have to stat the file again. */
@@ -695,7 +713,8 @@ char *d;                /* directory to delete */
 {
 # ifdef NO_RMDIR
     /* code from Greg Roelofs, who horked it from Mark Edwards (unzip) */
-    int r, len;
+    size_t len;
+    int r;
     char *s;              /* malloc'd string for system command */
 
     len = strlen(d);

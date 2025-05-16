@@ -450,6 +450,15 @@ int s;                  /* signal number (ignored) */
 /* Upon getting a user interrupt, turn echo back on for tty and abort
    cleanly using ziperr(). */
 {
+/* Cleanup residual temporary file */
+if ( s == SIGABRT )
+  {
+    if (tempzip != NULL)
+    {
+      destroy(tempzip);
+    }
+  }
+
 #if defined(AMIGA) && defined(__SASC)
    _abort();
 #else
@@ -730,6 +739,7 @@ local void help_extended()
 "  -r        recurse into directories (see Recursion below)",
 "  -m        after archive created, delete original files (move into archive)",
 "  -j        junk directory names (store just file names)",
+"  -k        Attempt to convert the names and paths to conform to MSDOS",
 "  -q        quiet operation",
 "  -v        verbose operation (just \"zip -v\" shows version information)",
 "  -c        prompt for one-line comment for each entry",
@@ -3217,9 +3227,14 @@ char **argv;            /* command line tokens */
           /* if nothing matches include list then still create an empty archive */
           allow_empty_archive = 1;
         case 'x':   /* Exclude following files */
+        {
+          int old_pathput = pathput;
+          pathput = 1;
           add_filter((int) option, value);
+          pathput = old_pathput;
           free(value);
           break;
+        }
 #ifdef S_IFLNK
         case 'y':   /* Store symbolic links as such */
           linkput = 1;  break;
@@ -3322,8 +3337,11 @@ char **argv;            /* command line tokens */
             /* just ignore as just marks what follows as non-option arguments */
 
           } else if (kk == 6) {
+            int old_pathput = pathput;
+            pathput = 1;
             /* value is R pattern */
             add_filter((int)'R', value);
+            pathput = old_pathput;
             free(value);
             if (first_listarg == 0) {
               first_listarg = argnum;
@@ -3387,8 +3405,11 @@ char **argv;            /* command line tokens */
                 {
                   kk = 4;
                   if (recurse == 2) {
+                    int old_pathput = pathput;
+                    pathput = 1;
                     /* reading patterns from stdin */
                     add_filter((int)'R', pp);
+                    pathput = old_pathput;
                   } else {
                     /* file argument now processed later */
                     add_name(pp);
@@ -3430,6 +3451,7 @@ char **argv;            /* command line tokens */
                 }
               }
               */
+              free(value);  /* Added by Polo from forum */
               if (kk == 3) {
                 first_listarg = argnum;
                 kk = 4;
@@ -3452,6 +3474,9 @@ char **argv;            /* command line tokens */
 
   /* Key not yet specified.  If needed, get/verify it now. */
   if (key_needed) {
+#if !CRYPT
+    ZIPERR(ZE_PARMS, "encryption not supported");
+#else /* CRYPT */
     if ((key = malloc(IZ_PWLEN+1)) == NULL) {
       ZIPERR(ZE_MEM, "was getting encryption password");
     }
@@ -3478,6 +3503,7 @@ char **argv;            /* command line tokens */
     if (r) {
       ZIPERR(ZE_PARMS, "password verification failed");
     }
+#endif
   }
   if (key) {
     /* if -P "" could get here */
@@ -3892,9 +3918,12 @@ char **argv;            /* command line tokens */
       }
       strcat(tempzip, "ziXXXXXX");
 
+      mode_t old_umask;        /* umask prior to temp file creation */
+      old_umask = umask(0066);
       if ((yd = mkstemp(tempzip)) == EOF) {
         ZIPERR(ZE_TEMP, tempzip);
       }
+      umask(old_umask);
       if ((y = fdopen(yd, FOPW_TMP)) == NULL) {
         ZIPERR(ZE_TEMP, tempzip);
       }
@@ -4904,9 +4933,12 @@ char **argv;            /* command line tokens */
     if ((tempzip = tempname(zipfile)) == NULL) {
       ZIPERR(ZE_MEM, "allocating temp filename");
     }
+    mode_t old_umask;  /* umask prior to temp file creation */
+    old_umask = umask(0066);
     if ((y = zfopen(tempzip, FOPW_TMP)) == NULL) {
       ZIPERR(ZE_TEMP, tempzip);
     }
+    umask(old_umask);
 #endif
   }
 

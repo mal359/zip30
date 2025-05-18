@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 1990-2014 Info-ZIP.  All rights reserved.
+  Copyright (c) 1990-2015 Info-ZIP.  All rights reserved.
 
   See the accompanying file LICENSE, version 2009-Jan-2 or later
   (the contents of which are also included in zip.h) for terms of use.
@@ -7,7 +7,7 @@
   also may be found at:  ftp://ftp.info-zip.org/pub/infozip/license.html
 */
 /*
-  crypt.h (full version) by Info-ZIP.   Last revised:  [see CR_VERSION_DATE]
+  crypt.h (full version) by Info-ZIP.
 
   The main (Traditional) encryption/decryption source code for Info-Zip
   software was originally written in Europe.  To the best of our knowledge,
@@ -22,28 +22,30 @@
   public domain versions.
  */
 
+/* This file is part of the Traditional (ZipCrypto) kit, which includes
+ * this file and crypt.c.  Now that Traditional Zip encryption is included
+ * in the base source kits (Zip, UnZip), these files are no longer supplied
+ * seperately and are now considered part of each base source kit.
+ *
+ * See README_CR.txt for more information on the ZCRYPT Traditional
+ * encryption package.  The version of ZCRYPT is now fixed at 3.0.  This will
+ * change only if the algorithms for Traditional encryption change.  Further
+ * changes to crypt.h and crypt.c will be tracked as part of each base source
+ * kit.
+ *
+ * AES_WG encryption uses files in the aes_wg directory in addition to the
+ * basic crypt.c and crypt.h.  These files must be added from a separate
+ * Info-ZIP AES WG kit.  This implementation of AES encryption is intended to
+ * be compatible with the WinZip AES implementation, and uses AES encryption
+ * code supplied by Brian Gladman.  For more information, see the file
+ * aes_wg/README_AES_WG.txt in the Info-ZIP AES WG kit.  See INSTALL
+ * for information on how to get that kit.
+ *
+ * Contact us if an encryption-free version of either Zip or UnZip is needed.
+ */
+
 #ifndef __crypt_h       /* Don't include more than once. */
 # define __crypt_h
-
-/* To enable encryption (use crypt.c and crypt.h), the builder sets one
- * or both of:
- *
- *    IZ_CRYPT_AES_WG   Include strong AES (WinZip/Gladman) encryption.
- *    IZ_CRYPT_TRAD     Include Zip traditional weak encryption.
- *
- * Other necessary macros are derived from these.
- *
- * AES_WG encryption uses files in the aes_wg directory in addition to
- * the basic crypt.c and crypt.h.  This implementation is intended to be
- * compatible with the WinZip AES implementation, and uses AES
- * encryption code supplied by Brian Gladman.  For more information, see
- * aes_wg/README_AES_WG.txt in Info-ZIP product kits or on the Info-ZIP
- * server.
- *
- * Source kits for both AES_WG and Traditional encryption are available
- * separately on the Info-ZIP server.  Contact us if an encryption-free
- * version of either the Zip or UnZip source kit is needed.
- */
 
 # ifdef IZ_CRYPT_ANY
 #  undef IZ_CRYPT_ANY
@@ -58,22 +60,19 @@
 #   include "aes_wg/fileenc.h"
 #  endif /* def IZ_CRYPT_AES_WG */
 
-#  ifndef CR_BETA
-#   define CR_BETA      /* This is a beta release. */
-#  endif
-
-#  ifdef CR_BETA
-#   undef CR_BETA       /* This is not a beta release. */
-#  endif
+/* Set this to 1 for beta, 0 for release. */
+#if 0
+# define CR_BETA
+#endif
 
 #  define CR_MAJORVER        3
 #  define CR_MINORVER        0
 #  ifdef CR_BETA
-#   define CR_BETA_VER      "k BETA"
-#   define CR_VERSION_DATE  "01 Oct 2014"       /* Last real code change. */
+#   define CR_BETA_VER      "l BETA"
+#   define CR_VERSION_DATE  "21 Mar 2013"       /* Last real code change. */
 #  else
 #   define CR_BETA_VER      ""
-#   define CR_VERSION_DATE  "01 Oct 2014"       /* Last public release date. */
+#   define CR_VERSION_DATE  "30 Aug 2015"       /* Last public release date. */
 #   define CR_RELEASE
 #  endif
 
@@ -167,7 +166,8 @@ int zipcloak OF((struct zlist far *, ZCONST char *));
 int zipbare OF((struct zlist far *, ZCONST char *));
 #   else /* def UTIL */
 unsigned zfwrite OF((zvoid *, extent, extent));
-extern char *key;
+extern char *key;             /* Encryption key */
+extern char *passwd;          /* Password before keyfile content added */
 #   endif /* def UTIL [else] */
 #  endif /* def ZIP */
 

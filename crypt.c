@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 1990-2014 Info-ZIP.  All rights reserved.
+  Copyright (c) 1990-2019 Info-ZIP.  All rights reserved.
 
   See the accompanying file LICENSE, version 2009-Jan-2 or later
   (the contents of which are also included in zip.h) for terms of use.
@@ -34,6 +34,8 @@
   IZ_CRYPT_AES_WG blocks).  This code is provided under the Info-ZIP
   license.  If this code enabled, it uses the Gladman AES code (or
   equivalent), which is distributed separately.
+
+  See crypt.h for additional information.
  */
 
 #define ZCRYPT_INTERNAL         /* Ensure <windows.h>, where applicable. */
@@ -110,7 +112,9 @@ local int testkey OF((__GPRO__ int hd_len, ZCONST uch *h,
                       ZCONST char *key));
 #  endif /* ndef FUNZIP */
 # else /* def UNZIP */          /* moved to globals.h for UnZip */
+#  ifdef IZ_CRYPT_TRAD
 local z_uint4 keys[3];          /* keys defining the pseudo-random sequence */
+#  endif /* def IZ_CRYPT_TRAD */
 # endif /* def UNZIP [else] */
 
 # ifndef Trace
@@ -121,20 +125,21 @@ local z_uint4 keys[3];          /* keys defining the pseudo-random sequence */
 #  endif
 # endif
 
-# ifdef IZ_CRYPT_TRAD
+# include "crc32.h"
 
-#  include "crc32.h"
-
-#  ifdef IZ_CRC_BE_OPTIMIZ
+# ifdef IZ_CRC_BE_OPTIMIZ
 local z_uint4 near crycrctab[256];
 local z_uint4 near *cry_crctb_p = NULL;
 local z_uint4 near *crytab_init OF((__GPRO));
-#   define CRY_CRC_TAB  cry_crctb_p
-#   undef CRC32
-#   define CRC32(c, b, crctab) (crctab[((int)(c) ^ (b)) & 0xff] ^ ((c) >> 8))
-#  else
-#   define CRY_CRC_TAB  CRC_32_TAB
-#  endif /* ?IZ_CRC_BE_OPTIMIZ */
+#  define CRY_CRC_TAB  cry_crctb_p
+#  undef CRC32
+#  define CRC32(c, b, crctab) (crctab[((int)(c) ^ (b)) & 0xff] ^ ((c) >> 8))
+# else /* def IZ_CRC_BE_OPTIMIZ */
+#  define CRY_CRC_TAB  CRC_32_TAB
+# endif /* def IZ_CRC_BE_OPTIMIZ [else] */
+
+
+# ifdef IZ_CRYPT_TRAD
 
 /***********************************************************************
  * Return the next byte in the pseudo-random sequence
@@ -149,6 +154,7 @@ int decrypt_byte(__G)
     temp = ((unsigned)GLOBAL(keys[2]) & 0xffff) | 2;
     return (int)(((temp * (temp ^ 1)) >> 8) & 0xff);
 }
+
 
 /***********************************************************************
  * Update the encryption keys with the next byte of plain text
@@ -242,7 +248,7 @@ void crypthead(passwd, crc)
     if (calls == 0)
     {
 #ifndef IZ_CRYPT_SKIP_SRAND
-        srand((unsigned)time(NULL) ^ ZCR_SEED2);
+        srand((unsigned)time(NULL) ^ (unsigned)(ZCR_SEED2));
 #endif /* ndef IZ_CRYPT_SKIP_SRAND */
         calls = 1;
     }
@@ -265,6 +271,8 @@ void crypthead(passwd, crc)
 
 
 /***********************************************************************
+ * zfwrite - write out buffer to file with encryption and byte counts
+ *
  * If requested, encrypt the data in buf, and in any case call bfwrite()
  * with the arguments to zfwrite().  Return what bfwrite() returns.
  * bfwrite() keeps byte counts, does splits, and calls fwrite() to
@@ -273,12 +281,14 @@ void crypthead(passwd, crc)
  * A bug has been found when encrypting large files that don't
  * compress.  See trees.c for the details and the fix.
  */
-unsigned zfwrite(buf, item_size, nb)
+unsigned int zfwrite(buf, item_size, nb)
     zvoid *buf;                 /* data buffer */
     extent item_size;           /* size of each item in bytes */
     extent nb;                  /* number of items */
 {
+#ifdef IZ_CRYPT_TRAD
     int t;                      /* temporary */
+#endif
 
     if (key != (char *)NULL)    /* key is the global password pointer */
     {
@@ -286,7 +296,7 @@ unsigned zfwrite(buf, item_size, nb)
       if (encryption_method >= AES_MIN_ENCRYPTION)
       {
         /* assume all items are bytes */
-        fcrypt_encrypt(buf, item_size * nb, &zctx);
+        fcrypt_encrypt(buf, (unsigned int)(item_size * nb), &zctx);
       }
       else
       {
@@ -296,7 +306,7 @@ unsigned zfwrite(buf, item_size, nb)
         char *p = (char *)buf;  /* steps through buffer */
 
         /* Encrypt data in buffer */
-        for (size = item_size*(ulg)nb; size != 0; p++, size--)
+        for (size = (ulg)item_size*(ulg)nb; size != 0; p++, size--)
         {
             *p = (char)zencode(*p, t);
         }
@@ -309,7 +319,7 @@ unsigned zfwrite(buf, item_size, nb)
     }
 
     /* Write the buffer out */
-    return bfwrite(buf, item_size, nb, BFWRITE_DATA);
+    return (unsigned int)bfwrite(buf, item_size, nb, BFWRITE_DATA);
 }
 
 
@@ -327,11 +337,11 @@ unsigned zfwrite(buf, item_size, nb)
  * Here, writing salt and password verification.
  */
 void aes_crypthead( OFT( ZCONST uch *)salt,
-                    OFT( uch) salt_len,
+                    OFT( int) salt_len,
                     OFT( ZCONST uch *)pwd_verifier)
 #  ifdef NO_PROTO
     ZCONST uch *salt;
-    uch salt_len;
+    int salt_len;
     ZCONST uch *pwd_verifier;
 #  endif /* def NO_PROTO */
 {
@@ -473,6 +483,9 @@ int ef_scan_for_aes( ef_buf, ef_len, vers, vend, mode, mthd)
  * catch underflow of ef_len caused by corrupt/malicious data.  (32-bit
  * is adequate.  Used "long" to accommodate any systems with 16-bit
  * "int".)  Made function static.
+ *
+ * 2017-06-22 SMS.  (VS 2017 complaints.)
+ * Changed long types to size_t.  (Assume size_t >= 32 bits.)
  */
 
 local int ef_strip_aes( ef_buf, ef_len)
@@ -481,10 +494,10 @@ local int ef_strip_aes( ef_buf, ef_len)
 {
     int ret = -1;               /* Return value. */
     unsigned eb_id;             /* Extra block ID. */
-    long eb_len;                /* Extra block length. */
+    size_t eb_len;              /* Extra block length. */
     uch *eb_aes;                /* Start of AES block. */
     uch *ef_buf_d;              /* Sliding extra field pointer. */
-    long ef_len_d;              /* Remaining extra field length. */
+    size_t ef_len_d;            /* Remaining extra field length. */
 
 /*---------------------------------------------------------------------------
     This function strips an EF_AES_WG block from an extra field.
@@ -539,8 +552,8 @@ local int ef_strip_aes( ef_buf, ef_len)
          * Note: memmove() is supposed to be overlap-safe.
          */
         eb_len += EB_HEADSIZE;  /* Total block size (header+data). */
-        ret = ef_len- eb_len;   /* New (reduced) extra field size. */
-        ef_len_d = ef_buf+ ef_len- eb_aes- eb_len;      /* Move size. */
+        ret = (int)(ef_len- eb_len);    /* New (reduced) extra field size. */
+        ef_len_d = (ef_buf+ ef_len- eb_aes- eb_len);    /* Move size. */
 
         if (ef_len_d > 0)
         {
@@ -572,7 +585,7 @@ int zipcloak(z, passwd)
 #   ifdef IZ_CRYPT_AES_WG
 #    define HEAD_LEN head_len   /* Variable header length. */
     int head_len;               /* Variable encryption header length. */
-    uch salt_len = 0;           /* AES salt length.  (Init'd to hush cmplr.) */
+    int salt_len = 0;           /* AES salt length.  (Init'd to hush cmplr.) */
 #   else /* def IZ_CRYPT_AES_WG */
 #    define HEAD_LEN RAND_HEAD_LEN      /* Constant trad. header length. */
 #   endif /* def IZ_CRYPT_AES_WG [else] */
@@ -584,6 +597,8 @@ int zipcloak(z, passwd)
 
     /* read the local header */
     res = readlocal(&localz, z);
+
+    /* readlocal() has already set localz->thresh_mthd = localz->how. */
 
     /* Update (assumed only one) disk.  Caller is responsible for offset. */
     z->dsk = 0;
@@ -619,7 +634,7 @@ int zipcloak(z, passwd)
         res = fcrypt_init(
          (encryption_method- (AES_MIN_ENCRYPTION- 1)),  /* AES mode. */
          (unsigned char*) passwd,                       /* Password. */
-         strlen( passwd),                               /* Password length. */
+         (unsigned int)strlen(passwd),                  /* Password length. */
          zsalt,                                         /* Salt. */
          zpwd_verifier,                                 /* Password vfy buf. */
          &zctx);                                        /* AES context. */
@@ -733,13 +748,17 @@ int zipbare(z, passwd)
 #   ifdef ZIP10
     int c0                /* byte preceding the last input byte */
 #   endif
+#   ifdef IZ_CRYPT_TRAD
     int c1;               /* last input byte */
+    int b;                /* bytes in buffer */
+#   endif
     /* all file offset and size now zoff_t - 8/28/04 EG */
     zoff_t size;          /* size of input data */
     struct zlist far *localz; /* local header */
     uch buf[1024];        /* write buffer */
-    int b;                /* bytes in buffer */
+#   ifdef IZ_CRYPT_AES_WG
     zoff_t z_siz;
+#   endif
     int passwd_ok;
     int r;                /* size of encryption header */
     int res;              /* return code */
@@ -758,9 +777,27 @@ int zipbare(z, passwd)
 #   else /* def IZ_CRYPT_AES_WG */
 #    define HEAD_LEN RAND_HEAD_LEN      /* Constant trad. header length. */
 #   endif /* def IZ_CRYPT_AES_WG [else] */
+#   ifdef IZ_CRYPT_AES_WG
+    ush vers = 0;               /* AES encryption version (1 or 2). */
+    ush vend = 0;               /* AES encryption vendor (should be "AE" (LE: x4541)). */
+    zoff_t pos_local = 0;       /* Local header position. */
+    zoff_t pos = 0;             /* End data position. */
+#   endif
+#   if defined(IZ_CRYPT_AES_WG) || defined(IZ_CRYPT_AES_WG_NEW)
+    ulg crc;                    /* To calculate CRC. */
+#   endif
 
     /* Read local header. */
     res = readlocal(&localz, z);
+
+    /* Some work is needed to let crypt support Zip splits.  This is
+       preventing split support in ZipCloak.  As ZCRYPT is now fixed
+       at 3.0 (see notes in crypt.h), it may be best to let the Zip
+       and UnZip versions of crypt.c part ways and make the changes
+       needed in the Zip version of crypt.c.  (Changes to the Zip
+       version of crypt.c are already documented in the Zip change log,
+       rather than some ZCRYPT log.)  Both zipbare() and zipcloak()
+       need modifications. */
 
     /* Update (assumed only one) disk.  Caller is responsible for offset. */
     z->dsk = 0;
@@ -772,8 +809,8 @@ int zipbare(z, passwd)
     if (how_orig == AESENCRED)
     {
         /* Extract the AES encryption details from the local extra field. */
-        ef_scan_for_aes( (uch *)localz->extra, localz->ext,
-         NULL, NULL, &aes_mode, &aes_mthd);
+        ef_scan_for_aes((uch *)localz->extra, localz->ext,
+                        &vers, &vend, &aes_mode, &aes_mthd);
 
         if ((aes_mode > 0) && (aes_mode <= 3))
         {
@@ -783,6 +820,7 @@ int zipbare(z, passwd)
         else
         {
             /* Unexpected/invalid AES mode value. */
+            zipwarn("invalid AES mode", "");
             return ZE_CRYPT;
         }
 
@@ -794,12 +832,12 @@ int zipbare(z, passwd)
         }
 
         /* Initialize the AES decryption machine for the password check. */
-        fcrypt_init( aes_mode,                  /* AES mode. */
-                     (unsigned char*) passwd,   /* Password. */
-                     strlen( passwd),           /* Password length. */
-                     h,                         /* Salt. */
-                     hh,                        /* PASSWORD_VERIFIER. */
-                     &zctx);                    /* AES context. */
+        fcrypt_init( aes_mode,                          /* AES mode. */
+                     (unsigned char*) passwd,           /* Password. */
+                     (unsigned int)strlen(passwd),      /* Password length. */
+                     h,                                 /* Salt. */
+                     hh,                                /* PASSWORD_VERIFIER. */
+                     &zctx);                            /* AES context. */
 
         /* Check the password verifier. */
         if (memcmp( (h+ HEAD_LEN- PWD_VER_LENGTH), hh, PWD_VER_LENGTH))
@@ -865,16 +903,28 @@ int zipbare(z, passwd)
     /* Good password.  Proceed to decrypt the entry. */
     z->siz -= HEAD_LEN;         /* Subtract the encryption header length. */
     localz->siz = z->siz;       /* Local, too. */
+#   ifdef IZ_CRYPT_AES_WG
     z_siz = z->siz;             /* Save z->siz as Use z_siz for I/O later. */
-
+#   endif
     localz->flg = z->flg &= ~9;         /* Clear the encryption and */
     z->lflg = localz->lflg &= ~9;       /* data-descriptor flags. */
+
+    /* Use correct CRC from central.  This is zero if AE-2, in which
+     * case we need to recalculate the CRC.
+     */
+    localz->crc = z->crc;
+
+    /* readlocal() has already set localz->thresh_mthd = localz->how.
+     * If AES, then code below revises these.
+     */
 
 #   ifdef IZ_CRYPT_AES_WG
     if (how_orig == AESENCRED)
     {
         localz->how = aes_mthd; /* Set the compression method value(s) */
         z->how = aes_mthd;      /* to the value from the AES extra block. */
+        z->thresh_mthd = aes_mthd;
+        localz->thresh_mthd = aes_mthd;
 
         /* Subtract the MAC size from the compressed size(s). */
         localz->siz -= MAC_LENGTH( aes_mode);
@@ -905,6 +955,12 @@ int zipbare(z, passwd)
     }
 #   endif /* def IZ_CRYPT_AES_WG */
 
+#   ifdef IZ_CRYPT_AES_WG
+    pos_local = zftello(y);
+#   else
+    zftello(y);
+#   endif
+
     /* Put out the (modified) local extra field. */
     if ((res = putlocal(localz, PUTLOCAL_WRITE)) != ZE_OK)
         return res;
@@ -918,15 +974,24 @@ int zipbare(z, passwd)
          * z->siz = new (decrypted) compressed size (bytes to write).
          */
         nout = 0;
+        if (vers == AES_WG_VEND_VERS_AE2) {
+            /* CRC is set to zero for AE-2, so we need to calculate it
+             * to update the decrypted entry.
+             */
+            crc = CRCVAL_INITIAL;
+        }
         for (size = z_siz; (size > 0) && (nout < z->siz);)
         {
-            nn = IZ_MIN( sizeof( buf), size);
-            n = fread( buf, 1, nn, in_file);
+            nn = IZ_MIN(sizeof(buf), (size_t)size);
+            n = fread(buf, 1, nn, in_file);
             if (n == nn)
             {
-                fcrypt_decrypt( buf, n, &zctx);
-                n = IZ_MIN( n, (z->siz - nout));
-                bfwrite( buf, 1, n, BFWRITE_DATA);
+                fcrypt_decrypt(buf, (unsigned int)n, &zctx);
+                n = IZ_MIN(n, (size_t)(z->siz - nout));
+                bfwrite(buf, 1, n, BFWRITE_DATA);
+                if (vers == 2) {
+                    crc = crc32(crc, (uch *)buf, n);
+                }
                 nout += n;      /* Bytes written. */
             }
             else
@@ -934,6 +999,24 @@ int zipbare(z, passwd)
                 return ferror(in_file) ? ZE_READ : ZE_EOF;
             }
             size -= nn;         /* Bytes left to read. */
+        }
+        if (vers == AES_WG_VEND_VERS_AE2) {
+            /* We need to update the local header only if AE-2 to
+             * replace the missing CRC.
+             */
+            localz->crc = z->crc = crc;
+            /* Update local extra field. */
+            pos = zftello(y);
+            if (zfseeko(y, pos_local, SEEK_SET)) {
+                zipwarn("output seek back failed", "");
+                return ZE_WRITE;
+            }
+            if ((res = putlocal(localz, PUTLOCAL_REWRITE)) != ZE_OK)
+                return res;
+            if (zfseeko(y, pos, SEEK_SET)) {
+                zipwarn("output seek forward failed", "");
+                return ZE_WRITE;
+            }
         }
     }
     else /* if (how_orig == AESENCRED) */
@@ -1269,6 +1352,7 @@ local int testkey(__G__ hd_len, h, key)
 } /* end function testkey() */
 
 # endif /* (defined(UNZIP) && !defined(FUNZIP)) */
+
 
 #else /* def IZ_CRYPT_ANY */
 

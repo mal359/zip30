@@ -29,7 +29,7 @@ CPP = /lib/cpp
 E =
 
 # probably can change this to 'install' if you have it
-INSTALL_PROGRAM = cp
+INSTALL_PROGRAM = cp -p
 # probably can change this to 'install -d' if you have it
 # XXX NextStep 3.3 and Openstep 4.x don't know about -p !
 INSTALL_D = mkdir -p

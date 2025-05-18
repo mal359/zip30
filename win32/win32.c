@@ -1162,47 +1162,77 @@ void version_local()
 #    define COMPILER_NAME2      "(Windows NT v3.5 SDK)"
 #  elif (_MSC_VER == 900)
 #    define COMPILER_NAME2      "(Visual C++ v2.x)"
-#  elif (_MSC_VER > 900)
+#  elif (900 < _MSC_VER && _MSC_VER <= 1800)
     sprintf(buf2, "(Visual C++ v%d.%d)", _MSC_VER/100 - 6, _MSC_VER%100/10);
+#  elif (_MSC_VER == 1900)
+#    define COMPILER_NAME2          "(Visual C++ v14.0)"
+#  elif (_MSC_VER == 1910)
+#    define COMPILER_NAME2          "(Visual C++ v15.0)"
+#  elif (_MSC_VER == 1911)
+#    define COMPILER_NAME2          "(Visual C++ v15.3)"
+#  elif (1912 <= _MSC_VER && _MSC_VER < 1920)
+    sprintf(buf2, "(Visual C++ v%d.%d)", _MSC_VER/100 - 4, _MSC_VER%100 - 7);
+#  elif (1920 <= _MSC_VER && _MSC_VER < 1927)
+    sprintf(buf2, "(Visual C++ v%d.%d)", _MSC_VER/100 - 3, _MSC_VER%100 - 20);
+#  elif (192829333 <= _MSC_FULL_VER && _MSC_FULL_VER < 192829910)
+#    define COMPILER_NAME2          "(Visual C++ v16.8)"
+#  elif (192829910 <= _MSC_FULL_VER && _MSC_FULL_VER < 192929917)
+#    define COMPILER_NAME2          "(Visual C++ v16.9)"
+#  elif (192929917 <= _MSC_FULL_VER && _MSC_FULL_VER < 192930129)
+#    define COMPILER_NAME2          "(Visual C++ v16.10)"
+#  elif (192930129 <= _MSC_FULL_VER && _MSC_FULL_VER < 193000000)
+#    define COMPILER_NAME2          "(Visual C++ v16.11)"
+#  elif (_MSC_VER >= 1930)
+	sprintf(buf2, "(Visual C++ v%d.%d)", _MSC_VER/100 - 2, _MSC_VER%100 - 30);
 #    define COMPILER_NAME2      buf2
 #  else
 #    define COMPILER_NAME2      "(bad version)"
 #  endif
 #elif defined(__WATCOMC__)
-#  if (__WATCOMC__ % 10 > 0)
+#  if (__WATCOMC__ >= 1200)
 /* We do this silly test because __WATCOMC__ gives two digits for the  */
 /* minor version, but Watcom packaging prefers to show only one digit. */
-    sprintf(buf, "Watcom C/C++ %d.%02d", __WATCOMC__ / 100,
-            __WATCOMC__ % 100);
-#  else
-    sprintf(buf, "Watcom C/C++ %d.%d", __WATCOMC__ / 100,
+    sprintf(buf, "Open Watcom C %d.%d", (__WATCOMC__ / 100) - 11,
             (__WATCOMC__ % 100) / 10);
-#  endif /* __WATCOMC__ % 10 > 0 */
+#  else
+    sprintf(buf, "Watcom C %d.%d", __WATCOMC__ / 100, __WATCOMC__ % 100);
+#  endif /* __WATCOMC__ >= 1200 */
 #  define COMPILER_NAME1        buf
 #  define COMPILER_NAME2        ""
 #elif defined(__TURBOC__)
 #  ifdef __BORLANDC__
+#   if (0x0590 <= __BORLANDC__ && __BORLANDC__ < 0x0620)
+#    define COMPILER_NAME1      "CodeGear C++"
+#   elif (0x0620 <= __BORLANDC__)
+#    define COMPILER_NAME1      "Embarcadero C++"
+#   else
 #    define COMPILER_NAME1      "Borland C++"
-#    if (__BORLANDC__ == 0x0452)   /* __BCPLUSPLUS__ = 0x0320 */
+#   endif
+#    if (__BORLANDC__ < 0x0200)   /* __BCPLUSPLUS__ = 0x0320 */
+#      define COMPILER_NAME2    " 1.0"
+#    elif (__BORLANDC__ == 0x0200)   /* __BCPLUSPLUS__ = 0x0320 */
+#      define COMPILER_NAME2    " 2.0"
+#    elif (__BORLANDC__ == 0x0400)   /* __BCPLUSPLUS__ = 0x0320 */
+#      define COMPILER_NAME2    " 3.0"
+#    elif (__BORLANDC__ == 0x0410)   /* __BCPLUSPLUS__ = 0x0320 */
+#      define COMPILER_NAME2    " 3.1"
+#    elif (__BORLANDC__ == 0x0452)   /* __BCPLUSPLUS__ = 0x0320 */
 #      define COMPILER_NAME2    " 4.0 or 4.02"
 #    elif (__BORLANDC__ == 0x0460)   /* __BCPLUSPLUS__ = 0x0340 */
 #      define COMPILER_NAME2    " 4.5"
-#    elif (__BORLANDC__ == 0x0500)   /* __TURBOC__ = 0x0500 */
-#      define COMPILER_NAME2    " 5.0"
-#    elif (__BORLANDC__ == 0x0520)   /* __TURBOC__ = 0x0520 */
-#      define COMPILER_NAME2    " 5.2 (C++ Builder 1.0)"
-#    elif (__BORLANDC__ == 0x0530)   /* __BCPLUSPLUS__ = 0x0530 */
-#      define COMPILER_NAME2    " 5.3 (C++ Builder 3.0)"
-#    elif (__BORLANDC__ == 0x0540)   /* __BCPLUSPLUS__ = 0x0540 */
-#      define COMPILER_NAME2    " 5.4 (C++ Builder 4.0)"
-#    elif (__BORLANDC__ == 0x0550)   /* __BCPLUSPLUS__ = 0x0550 */
-#      define COMPILER_NAME2    " 5.5 (C++ Builder 5.0)"
+#    elif ((0x0500 <= __BORLANDC__ && __BORLANDC__ < 0x0562) \
+           && __BORLANDC__ != 0x0551)
+#      define COMPILER_NAME2    " %X.%X", (__BORLANDC__ >> 8), \
+                                 ((__BORLANDC__ & 0xFF) / 0x10)
 #    elif (__BORLANDC__ == 0x0551)   /* __BCPLUSPLUS__ = 0x0551 */
-#      define COMPILER_NAME2    " 5.5.1 (C++ Builder 5.0.1)"
-#    elif (__BORLANDC__ == 0x0560)   /* __BCPLUSPLUS__ = 0x0560 */
-#      define COMPILER_NAME2    " 5.6 (C++ Builder 6)"
+#      define COMPILER_NAME2    " 5.5.1"
+#    elif (__BORLANDC__ == 0x0562)   /* __BCPLUSPLUS__ = 0x0562 */
+#      define COMPILER_NAME2    " 5.6.4"
+#    elif (0x0562 < __BORLANDC__)
+#      define COMPILER_NAME2    " %X.%X", (__BORLANDC__ >> 8), \
+                                 (__BORLANDC__ & 0xFF)
 #    else
-#      define COMPILER_NAME2    " later than 5.6"
+#      define COMPILER_NAME2    " (I think)"
 #    endif
 #  else /* !__BORLANDC__ */
 #    define COMPILER_NAME1      "Turbo C"
@@ -1254,8 +1284,35 @@ void version_local()
 #  define COMPILE_DATE ""
 #endif
 
-    printf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
-           "\nWindows", " (32-bit)", COMPILE_DATE);
+#ifdef _WIN64
+#  ifdef _IA64_
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows NT", " (Itanium)", COMPILE_DATE);
+#  elif defined _aarch64_
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows NT", " (ARM 64-bit)", COMPILE_DATE);
+#  else /* _AMD64_ */
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows NT", " (x64)", COMPILE_DATE);
+#  endif
+#else
+#  ifdef _MIPS_
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows NT", " (Jazz)", COMPILE_DATE);
+#  elif defined _ALPHA_
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows NT", " (Alpha AXP)", COMPILE_DATE);
+#  elif defined _PPC_
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows NT", " (PowerPC)", COMPILE_DATE);
+#  elif defined _ARM_
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows RT", " (ARM)", COMPILE_DATE);
+#  else /* _i386_ */
+    zprintf(CompiledWith, COMPILER_NAME1, COMPILER_NAME2,
+           "\nWindows 9x / NT", " (Intel)", COMPILE_DATE);
+#  endif
+#endif
 
     return;
 

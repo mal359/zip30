@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 1990-2007 Info-ZIP.  All rights reserved.
+  Copyright (c) 1990-2022 Info-ZIP.  All rights reserved.
 
   See the accompanying file LICENSE, version 2007-Mar-4 or later
   (the contents of which are also included in zip.h) for terms of use.
@@ -96,6 +96,64 @@
 #define NULL (void*)(0L)
 #endif
 
+
+/* 2011-12-04 SMS.
+ *
+ *       vms_fopen().
+ *
+ *    VMS-specific jacket for fopen().
+ *
+ * Formerly, zopen() was defined in [.vms]zipup.h, so:
+ *   #define zopen(n,p)   (vms_native?vms_open(n)    :(ftype)fopen((n), p))
+ * so, when vms_native was zero, fopen() was used directly (with the
+ * "fhow" value which was also defined in [.vms]zipup.h).  This caused
+ * problems ("%rms-w-rtb, !ul byte record too large for user's buffer")
+ * for files with Record Format: Stream or Stream_CR (but,
+ * interestingly, not Stream_LF).
+ *
+ * Now, zopen() is defined in [.vms]zipup.h, so:
+ *   #define zopen(n,p)   (vms_native?vms_open(n)    :vms_fopen(n))
+ * so vms_fopen() (below) is used to specify the exotic arguments for
+ * fopen() (and "fhow" is ignored).
+ *
+ * vms_fopen() uses stat() to get the record format of a file before
+ * opening it.  If stat() works, and the record format is one of the
+ * Stream types, then the file is opened in stream mode ("ctx = stm").
+ * This seems to solve the %RMS-W-RTB problem.
+ *
+ * Changed old non-DEC-C "mbc=60" to DEC-C-default-like "mbc=127".
+ */
+
+#ifdef __DECC
+# define FOPEN_ARGS , "acc", acc_cb, &fhow_id
+#else /* def __DECC */          /* (So, GNU C, VAX C, ...)*/
+# define FOPEN_ARGS , "mbc=127"
+#endif /* def __DECC [else] */
+
+FILE *vms_fopen( char *file_spec)
+{
+    int sts;
+    struct stat stat_buf;
+
+    sts = stat( file_spec, &stat_buf);
+    if ((sts == 0) &&
+     ((stat_buf.st_fab_rfm == FAB$C_STM) ||
+     (stat_buf.st_fab_rfm == FAB$C_STMCR) ||
+     (stat_buf.st_fab_rfm == FAB$C_STMLF)))
+    {
+        /* Use stream-mode access ("ctx = stm") for Stream[_xx] files. */
+        return fopen( file_spec, "r", "ctx = stm" FOPEN_ARGS);
+    }
+    else
+    {
+        return fopen( file_spec, "r" FOPEN_ARGS);
+    }
+}
+
+
+/*
+ *       vms_stat().
+ */
 int vms_stat( char *file, stat_t *s)
 {
     int status;
@@ -335,6 +393,9 @@ void version_local()
 #  elif defined( __ia64) /* defined( __alpha) */
       "OpenVMS",
       (sprintf( buf, " (%s IA64)", vms_vers), buf),
+#  elif defined( __x86_64) /* defined( __x86_64) */
+      "OpenVMS",
+      (sprintf( buf, " (%s x86_64)", vms_vers), buf),
 #  else /* defined( __alpha) */
       (ver_maj >= 6) ? "OpenVMS" : "VMS",
       (sprintf( buf, " (%s VAX)", vms_vers), buf),

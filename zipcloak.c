@@ -275,9 +275,9 @@ local void version_info()
   puts("ZipCloak special compilation options:");
   for (i = 0; (int)i < (int)(sizeof(comp_opts)/sizeof(char *) - 1); i++)
   {
-    printf("\t%s\n",comp_opts[i]);
+    printf("        %s\n",comp_opts[i]);
   }
-  printf("\t[encryption, version %d.%d%s of %s]\n",
+  printf("        [encryption, version %d.%d%s of %s]\n",
             CR_MAJORVER, CR_MINORVER, CR_BETA_VER, CR_VERSION_DATE);
 }
 

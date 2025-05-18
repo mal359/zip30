@@ -1,7 +1,7 @@
 /*
   revision.h - Zip 3
 
-  Copyright (c) 1990-2008 Info-ZIP.  All rights reserved.
+  Copyright (c) 1990-2022 Info-ZIP.  All rights reserved.
 
   See the accompanying file LICENSE, version 2007-Mar-4 or later
   (the contents of which are also included in zip.h) for terms of use.
@@ -21,8 +21,8 @@
 #define Z_PATCHLEVEL 0
 #define Z_BETALEVEL "i BETA"
 
-#define VERSION "3.0"
-#define REVDATE "July 5th 2008"
+#define VERSION "3.0s3"
+#define REVDATE "July 15th 2022"
 
 #define DW_MAJORVER    Z_MAJORVER
 #define DW_MINORVER    Z_MINORVER
@@ -50,7 +50,7 @@ extern ZCONST char * far cryptnote[7];
 #else /* DEFCPYRT */
 
 ZCONST char *copyright[] = {
-"Copyright (c) 1990-2008 Info-ZIP - Type '%s \"-L\"' for software license."
+"Copyright (c) 1990-2022 Info-ZIP - Type '%s \"-L\"' for software license."
 /* XXX still necessary ???? */
 #ifdef AZTEC_C
 ,        /* extremely lame compiler bug workaround */
@@ -79,7 +79,7 @@ ZCONST char * far cryptnote[] = {
 };
 
 ZCONST char * far swlicense[] = {
-"Copyright (c) 1990-2008 Info-ZIP.  All rights reserved.",
+"Copyright (c) 1990-2022 Info-ZIP.  All rights reserved.",
 "",
 "For the purposes of this copyright and license, \"Info-ZIP\" is defined as",
 "the following set of individuals:",

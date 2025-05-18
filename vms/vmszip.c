@@ -1083,13 +1083,31 @@ char *ex2in( char *x, int isdir, int *pdosflag)
       *ext_dir_and_name = '.';
   }
 
-  /* Remove a type-less dot. */
-  /* (Note that currently "name..ver" is not altered.) */
-  if ((ext_dir_and_name = strrchr( n, '.')) != NULL)
+  /* 2008-07-17 SMS.
+   * Added code to handle "." and ".." cases,
+   * and, with "-ww", to remove a dot from "name..ver".
+   */
+  /* Remove a type-less dot (unless there's also no name). */
+  if ((strlen( n) > 1) && ((ext_dir_and_name = strrchr( n, '.')) != NULL))
   {
-    if (ext_dir_and_name[ 1] == '\0')           /* "name." -> "name" */
+    if ((ext_dir_and_name[ 1] == '\0') &&       /* "name." -> "name",  */
+     (ext_dir_and_name[ -1] != '/') &&          /* but "." -> ".",     */
+     (ext_dir_and_name[ -1] != '.'))            /* and "X.." -> "X..". */
+    {
       *ext_dir_and_name = '\0';
-    else if (ext_dir_and_name[ 1] == ';')       /* "name.;ver" -> "name;ver" */
+    }
+    else if ((ext_dir_and_name[ 1] == ';') &&   /* "nm.;ver" -> "nm;ver",  */
+     (ext_dir_and_name[ -1] != '/') &&          /* but ".;ver" -> ".;ver", */
+     (ext_dir_and_name[ -1] != '.'))            /* and "X..;v" -> "X..;v". */
+    {
+      char *f = ext_dir_and_name+ 1;
+      while (*ext_dir_and_name++ = *f++);
+    }
+    else if ((vmsver > 1) &&                    /* -ww, */
+     (strlen( n) > 2) &&                        /* and enough characters, */
+     (ext_dir_and_name[ -1] == '.') &&          /* "nm..ver" -> "nm.ver",  */
+     (ext_dir_and_name[ -2] != '/') &&          /* but "..ver" -> "..ver", */
+     (ext_dir_and_name[ -2] != '.'))            /* and "X...v" -> "X...v". */
     {
       char *f = ext_dir_and_name+ 1;
       while (*ext_dir_and_name++ = *f++);
@@ -1199,7 +1217,11 @@ char *in2ex( char *n)
       {
         if (prop& 4)
         { /* Dot. */
-          if (t < last_dot)
+          /* 2008-07-16 SMS.
+           * Note: Because "t" has been incremented, a "<=" test is
+           * needed here to catch a dot immediately before "last_dot".
+           */
+          if (t <= last_dot)
           {
             /* Dot which must be escaped. */
             *x++ = '^';

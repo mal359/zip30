@@ -1837,7 +1837,7 @@ struct zlist far *z;
           sprintf(errbuf,
                   "local extra (%ld bytes) != central extra (%ld bytes): ",
                   (ulg)z->ext, (ulg)z->cext);
-          if (noisy) fprintf(mesg, "\tzip info: %s%s\n", errbuf, z->oname);
+          if (noisy) fprintf(mesg, "        zip info: %s%s\n", errbuf, z->oname);
         }
 #   if (!defined(RISCOS) && !defined(CMS_MVS))
         /* in noisy mode, extra field sizes are always reported */

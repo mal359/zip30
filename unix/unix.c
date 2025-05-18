@@ -42,6 +42,11 @@
 #  endif
 #endif /* HAVE_DIRENT_H || _POSIX_VERSION */
 
+#ifdef __APPLE__
+#  include "unix/macosx.h"
+#endif /* def __APPLE__ */
+
+
 #define PAD 0
 #define PATH_END '/'
 
@@ -60,6 +65,69 @@ local time_t label_utim = 0;
 
 /* Local functions */
 local char *readd OF((DIR *));
+
+#ifdef __APPLE__
+
+int get_apl_dbl_info( char *name)
+{
+  int sts;
+  int ret = 1;                  /* Assume failure. */
+
+  /* Attribute request structures for getattrlist(). */
+  struct attrlist attr_list_fndr;
+  struct attrlist attr_list_rsrc;
+
+  /* Attribute buffer structures for getattrlist(). */
+  attr_bufr_fndr_t attr_bufr_fndr;
+  attr_bufr_rsrc_t attr_bufr_rsrc;
+
+  /* Clear attribute list structure. */
+  memset( &attr_list_fndr, 0, sizeof( attr_list_fndr));
+  /* Set attribute list bits for object type and Finder info. */
+  attr_list_fndr.bitmapcount = ATTR_BIT_MAP_COUNT;
+  attr_list_fndr.commonattr = ATTR_CMN_OBJTYPE| ATTR_CMN_FNDRINFO;
+
+  /* Get file type and Finder info. */
+  sts = getattrlist( name,                      /* Path. */
+                     &attr_list_fndr,           /* Attrib list. */
+                     &attr_bufr_fndr,           /* Dest buffer. */
+                     sizeof( attr_bufr_fndr),   /* Dest buffer size. */
+                     0);                        /* Options. */
+
+  /* Continue processing if it's a regular file. */
+  if ((sts == 0) && (attr_bufr_fndr.obj_type == VREG))
+  {
+    /* Bytewise OR Finder info data to see if all zero. */
+    int fior;
+    int i;
+
+    fior = 0;
+    for (i = 0; i < 32; i++)
+      fior |= attr_bufr_fndr.fndr_info[ i];
+
+    /* Clear attribute list structure. */
+    memset( &attr_list_rsrc, 0, sizeof( attr_list_rsrc));
+    /* Set attribute list bits for resource fork size. */
+    attr_list_rsrc.bitmapcount = ATTR_BIT_MAP_COUNT;
+    attr_list_rsrc.fileattr = ATTR_FILE_RSRCLENGTH;
+
+    sts = getattrlist( name,                    /* Path. */
+                       &attr_list_rsrc,         /* Attrib list. */
+                       &attr_bufr_rsrc,         /* Dest buffer. */
+                       sizeof( attr_bufr_rsrc), /* Dest buffer size. */
+                       0);                      /* Options. */
+
+    /* Continue processing if there is any non-zero Finder info,
+       or if the resource fork size is positive.
+    */
+    if ((sts == 0) && ((attr_bufr_rsrc.size > 0) || (fior != 0)))
+    {
+      ret = 0;
+    }
+  }
+  return ret;
+}
+#endif /* def __APPLE__ */
 
 
 #ifdef NO_DIR                    /* for AT&T 3B1 */
@@ -160,6 +228,23 @@ int caseflag;           /* true to force case-sensitive match */
     /* add or remove name of file */
     if ((m = newname(n, 0, caseflag)) != ZE_OK)
       return m;
+
+#ifdef __APPLE__
+
+    /* If saving AppleDouble files, process one for this file. */
+    if (data_fork_only <= 0)
+    {
+      /* Check for non-null Finder info and resource fork. */
+      m = get_apl_dbl_info( n);
+      if (m == 0)
+      {
+        /* Process the AppleDouble file. */
+        if ((m = newname(n, 2, caseflag)) != ZE_OK)
+          return m;
+      }
+    }
+#endif /* def __APPLE__ */
+
   }
 #ifdef S_ISDIR
   else if (S_ISDIR(s.st_mode))
@@ -738,8 +823,8 @@ char *d;                /* directory to delete */
 /******************************/
 
 #if defined(__NetBSD__) || defined(__FreeBSD__) || defined(__386BSD__) || \
-    defined(__OpenBSD__) || defined(__bsdi__) || defined(__DragonFly__) || \
-	defined(__MidnightBSD__)
+    defined(__OpenBSD__) || defined(__bsdi__) || defined( __APPLE__) || \
+	defined(__DragonFly__) || defined(__MidnightBSD__)
 #include <sys/param.h> /* for the BSD define */
 /* if we have something newer than NET/2 we'll use uname(3) */
 #if (BSD > 199103)

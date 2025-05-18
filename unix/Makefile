@@ -100,6 +100,7 @@ zip.o zipup.o crypt.o ttyio.o zipcloak.o crypt_.o: crypt.h
 zip.o zipup.o zipnote.o zipcloak.o zipsplit.o: revision.h
 zip.o crypt.o ttyio.o zipcloak.o crypt_.o: ttyio.h
 zipup.o: unix/zipup.h
+fileio.o fileio_.o unix.o unix_.o zipup.o : unix/macosx.h
 
 match.o: match.S
 	$(CPP) match.S > _match.s

@@ -20,6 +20,10 @@
 #  include "helpers.h"
 #endif
 
+#if defined( UNIX) && defined( __APPLE__)
+#  include "unix/macosx.h"
+#endif /* defined( UNIX) && defined( __APPLE__) */
+
 #ifdef VMS
 #  include "vms/vms.h"
 #endif /* def VMS */
@@ -852,19 +856,78 @@ int newnamew(namew, isdir, casesensitive)
 # endif
 #endif
 
-int newname(name, isdir, casesensitive)
+int newname(name, flags, casesensitive)
   char *name;           /* name to add (or exclude) */
-  int  isdir;           /* true for a directory */
+  int  flags;       /* &FLAGS_DIR = directory, &FLAGS_APLDBL = AppleDouble. */
   int  casesensitive;   /* true for case-sensitive matching */
 /* Add (or exclude) the name of an existing disk file.  Return an error
    code in the ZE_ class. */
 {
+
+#define isdir (flags& FLAGS_DIR)
+
+#if defined( UNIX) && defined( __APPLE__)
+# define isapldbl (flags& FLAGS_APLDBL)
+  /* AppleDouble special name pointers.
+   * name_archv is stored in the archive.
+   * name_flsys is sought in the file system.
+   */
+  char *name_archv;     /* Arg name or AppleDouble "._" name. */
+  char *name_flsys;     /* Arg name or AppleDouble "/rsrc" name. */
+#else /* defined( UNIX) && defined( __APPLE__) */
+  /* On non-Mac-OS-X systems, use the file name argument as-is. */
+# define name_archv name
+# define name_flsys name
+#endif /* defined( UNIX) && defined( __APPLE__) [else] */
+
   char *iname, *zname;  /* internal name, external version of iname */
   char *undosm;         /* zname version with "-j" and "-k" options disabled */
   char *oname;          /* iname converted for display */
   struct flist far *f;  /* where in found, or new found entry */
   struct zlist far *z;  /* where in zfiles (if found) */
   int dosflag;
+  int pad_name;         /* Pad for name (may include APL_DBL_SFX). */
+
+#if defined( UNIX) && defined( __APPLE__)
+  /* Create special names for an AppleDouble file. */ 
+  if (isapldbl)
+  {
+    char *rslash;
+
+    /* Allocate storage for modified AppleDouble file names. */
+    if ((name_archv = malloc( strlen( name)+ sizeof( APL_DBL_PFX))) == NULL)
+      return ZE_MEM;
+
+    if ((name_flsys = malloc( strlen( name)+ sizeof( APL_DBL_SFX))) == NULL)
+      return ZE_MEM;
+
+    /* Construct in-archive AppleDouble file name. */
+    rslash = strrchr( name, '/');
+    if (rslash == NULL)
+    {
+      /* "name" -> "._name". */
+      strcpy( name_archv, "._");
+      strcat( name_archv, name);
+    }
+    else
+    {
+      /* "dir/name" -> "dir/._name". */
+      strncpy( name_archv, name, (rslash+ 1- name));
+      strcpy( &name_archv[ rslash+ 1- name], APL_DBL_PFX);
+      strcpy( &name_archv[ rslash+ 1- name+ strlen( APL_DBL_PFX)], &rslash[ 1]);
+    }
+
+    /* Construct in-file-system AppleDouble file name. */
+    /* "name" -> "name/rsrc". */
+    strcpy( name_flsys, name);
+    strcat( name_flsys, APL_DBL_SFX);
+  }
+  else
+  {
+    name_archv = name;
+    name_flsys = name;
+  }
+#endif /* defined( UNIX) && defined( __APPLE__) */
 
   /* Scanning files ...
    *
@@ -897,7 +960,7 @@ int newname(name, isdir, casesensitive)
 
   /* Search for name in zip file.  If there, mark it, else add to
      list of new names to do (or remove from that list). */
-  if ((iname = ex2in(name, isdir, &dosflag)) == NULL)
+  if ((iname = ex2in(name_archv, isdir, &dosflag)) == NULL)
     return ZE_MEM;
 
   /* Discard directory names with zip -rj */
@@ -916,6 +979,16 @@ int newname(name, isdir, casesensitive)
 # endif /* !RISCOS */
 #endif /* !AMIGA */
     free((zvoid *)iname);
+
+#if defined( UNIX) && defined( __APPLE__)
+    /* Free the special AppleDouble name storage. */
+    if (isapldbl)
+    {
+      free( name_archv);
+      free( name_flsys);
+    }
+#endif /* defined( UNIX) && defined( __APPLE__) */
+
     return ZE_OK;
   }
   undosm = NULL;
@@ -924,7 +997,7 @@ int newname(name, isdir, casesensitive)
     dosify = 0;
     pathput = 1;
     /* zname is temporarly mis-used as "undosmode" iname pointer */
-    if ((zname = ex2in(name, isdir, NULL)) != NULL) {
+    if ((zname = ex2in(name_archv, isdir, NULL)) != NULL) {
       undosm = in2ex(zname);
       free(zname);
     }
@@ -955,14 +1028,14 @@ int newname(name, isdir, casesensitive)
       free((zvoid *)zname);
     } else {
       z->mark = 1;
-      if ((z->name = malloc(strlen(name) + 1 + PAD)) == NULL) {
+      if ((z->name = malloc(strlen(name_flsys) + 1 + PAD)) == NULL) {
         if (undosm != zname)
           free((zvoid *)undosm);
         free((zvoid *)iname);
         free((zvoid *)zname);
         return ZE_MEM;
       }
-      strcpy(z->name, name);
+      strcpy(z->name, name_flsys);
       if (z->oname) free(z->oname);
       z->oname = oname;
       z->dosflag = dosflag;
@@ -1025,14 +1098,33 @@ int newname(name, isdir, casesensitive)
            free((zvoid *)undosm);
          free((zvoid *)iname);
          free(oname);
+
+#if defined( UNIX) && defined( __APPLE__)
+        /* Free the special AppleDouble name storage. */
+        if (isapldbl)
+        {
+          free( name_archv);
+          free( name_flsys);
+        }
+#endif /* defined( UNIX) && defined( __APPLE__) */
+
          return ZE_OK;
     }
 #endif  /* CMS_MVS */
 
     /* allocate space and add to list */
+    pad_name = PAD;
+#if defined( UNIX) && defined( __APPLE__)
+    if (isapldbl)
+    {
+       /* Add storage for AppleDouble name suffix. */
+       pad_name += strlen( APL_DBL_SFX);
+    }
+#endif /* defined( UNIX) && defined( __APPLE__) */
+
     if ((f = (struct flist far *)farmalloc(sizeof(struct flist))) == NULL ||
         fcount + 1 < fcount ||
-        (f->name = malloc(strlen(name) + 1 + PAD)) == NULL)
+        (f->name = malloc(strlen(name) + 1 + pad_name)) == NULL)
     {
       if (f != NULL)
         farfree((zvoid far *)f);
@@ -1043,9 +1135,19 @@ int newname(name, isdir, casesensitive)
       free(oname);
       return ZE_MEM;
     }
-    strcpy(f->name, name);
+    strcpy(f->name, name_flsys);
     f->iname = iname;
     f->zname = zname;
+
+#if defined( UNIX) && defined( __APPLE__)
+    /* Free the special AppleDouble name storage. */
+    if (isapldbl)
+    {
+      free( name_archv);
+      free( name_flsys);
+    }
+#endif /* defined( UNIX) && defined( __APPLE__) */
+
 #ifdef UNICODE_SUPPORT
     /* Unicode */
     f->uname = local_to_utf8_string(iname);
@@ -1056,11 +1158,15 @@ int newname(name, isdir, casesensitive)
     if (strcmp(f->name, "-") == 0) {
       f->namew = local_to_wchar_string(f->name);
     }
-#endif
+#endif /* def WIN32 */
+#endif /* def UNICODE_SUPPORT */
 
-#endif
     f->oname = oname;
     f->dosflag = dosflag;
+
+#if defined( UNIX) && defined( __APPLE__)
+    f->flags = flags;
+#endif /* defined( UNIX) && defined( __APPLE__) */
 
     *fnxt = f;
     f->lst = fnxt;
@@ -2569,7 +2675,7 @@ int close_split(disk_number, tempfile, temp_name)
   split_path = get_out_split_path(out_path, disk_number);
 
   if (noisy_splits) {
-    zipmessage("\tClosing split ", split_path);
+    zipmessage("        Closing split ", split_path);
   }
 
   fclose(tempfile);

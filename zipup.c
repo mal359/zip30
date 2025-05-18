@@ -107,6 +107,9 @@
 
 #ifdef UNIX
 #  include "unix/zipup.h"
+#  ifdef __APPLE__
+#    include "unix/macosx.h"
+#  endif /* def __APPLE__ */
 #endif
 
 #ifdef CMS_MVS
@@ -199,6 +202,38 @@ local ftype ifile;              /* file to compress */
     local unsigned in_size;     /* size of current input buffer */
 # endif /* ZP_NEED_MEMCOMPR */
 #endif /* ?USE_ZLIB */
+
+#if defined( UNIX) && defined( __APPLE__)
+
+    /* Buffer for AppleDouble header (initialized where constant). */
+    unsigned char apl_dbl_hdr[ APL_DBL_HDR_SIZE] =
+     { 0x00, 0x05, 0x16, 0x07,          /*  0  AppleDouble magic.            */
+       0x00, 0x02, 0x00, 0x00,          /*  4  AppleDouble version.          */
+       0x00, 0x00, 0x00, 0x00,          /*  8  Filler (16 bytes) ...         */
+       0x00, 0x00, 0x00, 0x00,          /*     ... filler ...                */
+       0x00, 0x00, 0x00, 0x00,          /*     ... filler ...                */
+       0x00, 0x00, 0x00, 0x00,          /*     ... filler.                   */
+       0x00, 0x02,                      /* 24  Entry count (2).              */
+       0x00, 0x00, 0x00, 0x09,          /* 26  Entry ID (9 = Finder info).   */
+       0x00, 0x00, 0x00, 0x32,          /* 30  Offset (50).                  */
+       0x00, 0x00, 0x00, 0x20,          /* 34  Length (32).                  */
+       0x00, 0x00, 0x00, 0x02,          /* 38  Entry ID (2 = Resource fork). */
+       0x00, 0x00, 0x00, 0x52           /* 42  Offset (82).                  */
+    /* 0x00, 0x00, 0x00, 0x00 */        /* 46  Length (TBD).                 */
+                                        /* 50  Finder info (32 bytes).       */
+                                        /* 82  Resource fork (TBD bytes).    */
+     };
+
+    unsigned char *file_read_fake_buf = apl_dbl_hdr;
+    size_t file_read_fake_len;
+    local int translate_eol_lcl;
+
+   /* Use special AppleDouble-modified "-l[l]" flag. */
+#  define TRANSLATE_EOL translate_eol_lcl
+#else
+   /* Use normal (unmodified) "-l[l]" flag. */
+#  define TRANSLATE_EOL translate_eol
+#endif /* defined( UNIX) && defined( __APPLE__) */
 
 #ifdef BZIP2_SUPPORT
     local int bzipInit;         /* flag: bzip2lib is initialized */
@@ -438,6 +473,25 @@ struct zlist far *z;    /* zip entry to compress */
 #else
   tim = filetime(z->name, &a, &q, &f_utim);
 #endif
+
+#if defined( UNIX) && defined( __APPLE__)
+  /* Add AppleDouble header size to AppleDouble resource fork file size,
+   * as data for both will be stored in the AppleDouble "._" file.
+   */
+  if (z->flags& FLAGS_APLDBL)
+    q += APL_DBL_HDR_SIZE;
+
+  /* Set translate_eol_lcl according to translate_eol and AppleDouble flag. */
+  if (z->flags& FLAGS_APLDBL) {
+    /* Never translate an (always binary) AppleDouble file. */
+    translate_eol_lcl = 0;
+  }
+  else {
+    /* Translate normal files normally. */
+    translate_eol_lcl = translate_eol;
+  }
+#endif /* defined( UNIX) && defined( __APPLE__) */
+
   if (tim == 0 || q == (zoff_t) -3)
     return ZE_OPEN;
 
@@ -473,7 +527,17 @@ struct zlist far *z;    /* zip entry to compress */
   /* initial z->len so if error later have something */
   z->len = uq;
 
+#if defined( UNIX) && defined( __APPLE__)
+  if (z->flags& FLAGS_APLDBL) {
+    z->att = (ush)BINARY;       /* AppleDouble files are always binary. */
+  }
+  else {
+    z->att = (ush)UNKNOWN; /* will be changed later */
+  }
+#else /* defined( UNIX) && defined( __APPLE__) */
   z->att = (ush)UNKNOWN; /* will be changed later */
+#endif /* defined( UNIX) && defined( __APPLE__) [else] */
+
   z->atx = 0; /* may be changed by set_extra_field() */
 
   /* Free the old extra fields which are probably obsolete */
@@ -608,6 +672,87 @@ struct zlist far *z;    /* zip entry to compress */
 #else
       if ((ifile = zopen(z->name, fhow)) == fbad)
         return ZE_OPEN;
+
+#  if defined( UNIX) && defined( __APPLE__)
+      /* Clear AppleDouble fake data byte count. */
+      if ((z->flags& FLAGS_APLDBL) == 0)
+      {
+        file_read_fake_len = 0;
+      }
+      else
+      {
+        char btrbslash;         /* Saved character had better be a slash. */
+        int sts;
+        struct attrlist attr_list_fndr;
+        struct attrlist attr_list_rsrc;
+
+        attr_bufr_fndr_t attr_bufr_fndr;
+        attr_bufr_rsrc_t attr_bufr_rsrc;
+
+        /* Truncate name at "/rsrc" for getattrlist(). */
+        btrbslash = z->name[ strlen( z->name)- strlen( APL_DBL_SFX)];
+        z->name[ strlen( z->name)- strlen( APL_DBL_SFX)] = '\0';
+
+        /* Get object type and Finder info. */
+        /* Clear attribute list structure. */
+        memset( &attr_list_fndr, 0, sizeof( attr_list_fndr));
+        /* Set attribute list bits for object type and Finder info. */
+        attr_list_fndr.bitmapcount = ATTR_BIT_MAP_COUNT;
+        attr_list_fndr.commonattr = ATTR_CMN_OBJTYPE| ATTR_CMN_FNDRINFO;
+
+        /* Get file type and Finder info. */
+        sts = getattrlist( z->name,                   /* Path. */
+                           &attr_list_fndr,           /* Attrib list. */
+                           &attr_bufr_fndr,           /* Dest buffer. */
+                           sizeof( attr_bufr_fndr),   /* Dest buffer size. */
+                           0);                        /* Options. */
+
+        if ((sts != 0) || (attr_bufr_fndr.obj_type != VREG))
+        {
+          ZIPERR( ZE_OPEN, "getattrlist(fndr) failure");
+        }
+        else
+        {
+          /* Get resource fork size. */
+          /* Clear attribute list structure. */
+          memset( &attr_list_rsrc, 0, sizeof( attr_list_rsrc));
+          /* Set attribute list bits for resource fork size. */
+          attr_list_rsrc.bitmapcount = ATTR_BIT_MAP_COUNT;
+          attr_list_rsrc.fileattr = ATTR_FILE_RSRCLENGTH;
+  
+          sts = getattrlist( z->name,                 /* Path. */
+                             &attr_list_rsrc,         /* Attrib list. */
+                             &attr_bufr_rsrc,         /* Dest buffer. */
+                             sizeof( attr_bufr_rsrc), /* Dest buffer size. */
+                             0);                      /* Options. */
+          if (sts != 0)
+          {
+            ZIPERR( ZE_OPEN, "getattrlist(rsrc) failure");
+          }
+          else
+          {
+            /* Move Finder info into AppleDouble header buffer. */
+            memcpy( &apl_dbl_hdr[ APL_DBL_HDR_FNDR_INFO_OFFS],
+             attr_bufr_fndr.fndr_info,
+             32);
+            /* Set fake I/O buffer size. */
+            file_read_fake_len = APL_DBL_HDR_SIZE;
+            /* Fill in resource fork size. */
+            apl_dbl_hdr[ APL_DBL_HDR_RSRC_FORK_SIZE+ 0] =
+             (attr_bufr_rsrc.size >> 24)& 0xff;
+            apl_dbl_hdr[ APL_DBL_HDR_RSRC_FORK_SIZE+ 1] =
+             (attr_bufr_rsrc.size >> 16)& 0xff;
+            apl_dbl_hdr[ APL_DBL_HDR_RSRC_FORK_SIZE+ 2] =
+             (attr_bufr_rsrc.size >>  8)& 0xff;
+            apl_dbl_hdr[ APL_DBL_HDR_RSRC_FORK_SIZE+ 3] =
+             (attr_bufr_rsrc.size)& 0xff;
+          }
+        }
+        /* Restore name suffix ("/rsrc"). */
+        z->name[ strlen( z->name)] = btrbslash;
+      }
+#  endif /* defined( UNIX) && defined( __APPLE__) */
+
 #endif
     }
 
@@ -623,7 +768,7 @@ struct zlist far *z;    /* zip entry to compress */
 
 #if defined(MMAP) || defined(BIG_MEM)
     /* Map ordinary files but not devices. This code should go in fileio.c */
-    if (!translate_eol && m != STORE && q != -1L && (ulg)q > 0 &&
+    if (!TRANSLATE_EOL && m != STORE && q != -1L && (ulg)q > 0 &&
         (ulg)q + MIN_LOOKAHEAD > (ulg)q) {
 # ifdef MMAP
       /* Map the whole input file in memory */
@@ -841,14 +986,14 @@ struct zlist far *z;    /* zip entry to compress */
       s = filecompress(z, &m);
     }
 #ifndef PGP
-    if (z->att == (ush)BINARY && translate_eol && file_binary) {
-      if (translate_eol == 1)
+    if (z->att == (ush)BINARY && TRANSLATE_EOL && file_binary) {
+      if (TRANSLATE_EOL == 1)
         zipwarn("has binary so -l ignored", "");
       else
         zipwarn("has binary so -ll ignored", "");
     }
-    else if (z->att == (ush)BINARY && translate_eol) {
-      if (translate_eol == 1)
+    else if (z->att == (ush)BINARY && TRANSLATE_EOL) {
+      if (TRANSLATE_EOL == 1)
         zipwarn("-l used on binary file - corrupted?", "");
       else
         zipwarn("-ll used on binary file - corrupted?", "");
@@ -942,7 +1087,7 @@ struct zlist far *z;    /* zip entry to compress */
    * and not on MSDOS -- diet in TSR mode reports an incorrect file size)
    */
 #ifndef TANDEM /* Tandem EOF does not match byte count unless Unstructured */
-  if (!translate_eol && q != -1L && isize != q)
+  if (!TRANSLATE_EOL && q != -1L && isize != q)
   {
     Trace((mesg, " i=%lu, q=%lu ", isize, q));
     zipwarn(" file size changed while zipping ", z->name);
@@ -1080,7 +1225,7 @@ struct zlist far *z;    /* zip entry to compress */
   if (noisy)
   {
     if (verbose) {
-      fprintf( mesg, "\t(in=%s) (out=%s)",
+      fprintf( mesg, "        (in=%s) (out=%s)",
                zip_fzofft(isize, NULL, "u"), zip_fzofft(s, NULL, "u"));
     }
 #ifdef BZIP2_SUPPORT
@@ -1158,6 +1303,18 @@ local unsigned file_read(buf, size)
   char *b;
   zoff_t isize_prev;    /* Previous isize.  Used for overflow check. */
 
+#if defined( UNIX) && defined( __APPLE__)
+  /* Supply data from fake file buffer, if available.
+   * Always binary, never translated.
+   */
+#  define IZ_MIN( a, b) (((a) < (b)) ? (a) : (b))
+  if (file_read_fake_len > 0) {
+    len = IZ_MIN( file_read_fake_len, size);
+    memcpy( buf, file_read_fake_buf, len);
+    file_read_fake_len -= len;
+  } else
+  /* Otherwise, read real data from the real file. */
+#endif /* defined( UNIX) && defined( __APPLE__) */
 #if defined(MMAP) || defined(BIG_MEM)
   if (remain == 0L) {
     return 0;
@@ -1173,7 +1330,7 @@ local unsigned file_read(buf, size)
     len = size;
   } else
 #endif /* MMAP || BIG_MEM */
-  if (translate_eol == 0) {
+  if (TRANSLATE_EOL == 0) {
     len = zread(ifile, buf, size);
     if (len == 0) return 0;      /* EOF */
     if (len == (unsigned)-1) {   /* read error */
@@ -1190,7 +1347,7 @@ local unsigned file_read(buf, size)
       }
     }
 #endif
-  } else if (translate_eol == 1) {
+  } else if (TRANSLATE_EOL == 1) {
     /* translate_eol == 1 */
     /* Transform LF to CR LF */
     size >>= 1;
@@ -1314,8 +1471,8 @@ local int zl_deflate_init(pack_level)
         zp_err = ZE_LOGIC;
     } else if (strcmp(zlib_version, ZLIB_VERSION) != 0) {
         fprintf(mesg,
-                "\twarning:  different zlib version (expected %s, using %s)\n",
-                ZLIB_VERSION, zlib_version);
+         "        warning:  different zlib version (expected %s, using %s)\n",
+         ZLIB_VERSION, zlib_version);
     }
 
     /* windowBits = log2(WSIZE) */
@@ -1478,11 +1635,11 @@ local zoff_t filecompress(z_entry, cmpr_method)
     {
         zstrm.next_in = (Bytef *)f_ibuf;
     }
-    zstrm.avail_in = file_read(zstrm.next_in, ibuf_sz);
+    zstrm.avail_in = file_read((char *)zstrm.next_in, ibuf_sz);
     if (zstrm.avail_in < ibuf_sz) {
-        unsigned more = file_read(zstrm.next_in + zstrm.avail_in,
+        unsigned more = file_read((char *)(zstrm.next_in + zstrm.avail_in),
                                   (ibuf_sz - zstrm.avail_in));
-        if (more == EOF || more == 0) {
+        if (more == (unsigned)EOF || more == 0) {
             maybe_stored = TRUE;
         } else {
             zstrm.avail_in += more;
@@ -1491,7 +1648,8 @@ local zoff_t filecompress(z_entry, cmpr_method)
     zstrm.next_out = (Bytef *)f_obuf;
     zstrm.avail_out = OBUF_SZ;
 
-    if (!maybe_stored) while (zstrm.avail_in != 0 && zstrm.avail_in != EOF) {
+    if (!maybe_stored)
+    while (zstrm.avail_in != 0 && zstrm.avail_in != (uInt)EOF) {
         err = deflate(&zstrm, Z_NO_FLUSH);
         if (err != Z_OK && err != Z_STREAM_END) {
             sprintf(errbuf, "unexpected zlib deflate error %d", err);
@@ -1540,7 +1698,7 @@ local zoff_t filecompress(z_entry, cmpr_method)
 #else
             zstrm.next_in = (Bytef *)f_ibuf;
 #endif
-            zstrm.avail_in = file_read(zstrm.next_in, ibuf_sz);
+            zstrm.avail_in = file_read((char *)zstrm.next_in, ibuf_sz);
         }
     }
 
@@ -1548,7 +1706,7 @@ local zoff_t filecompress(z_entry, cmpr_method)
         err = deflate(&zstrm, Z_FINISH);
         if (maybe_stored) {
             if (err == Z_STREAM_END && zstrm.total_out >= zstrm.total_in &&
-                fseekable(zipfile)) {
+                fseekable(y)) {
                 /* deflation does not reduce size, switch to STORE method */
                 unsigned len_out = (unsigned)zstrm.total_in;
                 if (zfwrite(f_ibuf, 1, len_out) != len_out) {
@@ -1884,7 +2042,7 @@ int *cmpr_method;
              */
             if (err == BZ_STREAM_END
                 && bstrm.total_out_lo32 >= bstrm.total_in_lo32
-                && fseekable(zipfile)) {
+                && fseekable(y)) {
                 /* BZIP2 compress does not reduce size,
                    switch to STORE method */
                 unsigned len_out = (unsigned)bstrm.total_in_lo32;

@@ -3458,3 +3458,36 @@ Initial work on Zip 3.0 by Ed Gordon and Rainer Nausedat
     environment variables.  zip.c (Ed)
  4. Update WhatsNew.  WHATSNEW (Ed)
  5. Update announcement.  zip30.ann (Ed)
+------------------------ July 25th 2022 version 3.0s3  ----------------------
+ 0. Not a formal release, only some miscellaneous bug fixes and minor
+    changes to 3.0.
+ 1. bzip2 (VMS-compatible 1.0.8c) source kit included.  bzip2/...  (SMS)
+ 2. Add support for x86_64 hardware architecture on VMS.  Builders
+    backported (quickly) from later Zip version.  See comments in
+    build_zip.com or descrip.mms.  x86_64 architecture correctly
+    identified in in system-identification messages.  vms/build_zip.com,
+    vms/check_large.com (new), vms/collect_deps.com (new),
+    vms/cppcld.com (new), vms/descrip.mms, vms/descrip_deps.mms,
+    vms/descrip_mkdeps.mms, vms/descrip_src.mms, vms/optgen.com (new),
+    vms/vms.c (SMS) [31e21+]
+ 3. Add support for Mac OS X file resource data to Unix port used for Mac OS
+    X with changes in #if defined(UNIX) && defined(__APPLE__) blocks.
+    Change parameter in newname() from isdir to flags.  Define isdir as
+    (flags & FLAGS_DIR).  Define archive name and file system name pointers
+    for AppleDouble.  Change ex2in() to use name_archv.  Add data_fork_only
+    global.  Add check of f->flags and store f->flags in z->flags for UNIX
+    APPLE.  Add FLAGS_DIR and FLAGS_APLDBL constants for AppleDouble.
+    Note: This (old) code might misbehave on an APFS file system.
+    fileio.c, globals.c, unix/macosx.h (new), unix/Makefile, unix/unix.c,
+    zip.c, zip.h, zipup.c (SMS) [3.1a01]
+ 4. Remove \t escapes for tabs from messages.  fileio.c, zip.c, zipcloak.c,
+    zipfile.c, zipnote.c, zipsplit.c, zipup.c (SMS) [3.1a01]
+ 5. Add vms_fopen() to replace use of zopen() to handle better files with
+    record format  Stream or Stream_CR.  vms/vms.c, vms/vms.h,
+    vms/zipup.h (SMS) [3.1d23]
+ 6. Change add_filter() to always save the full path in ex2in() by
+    setting pathput to 1 for just that call.  This should fix a
+    problem where patterns are not matching stored paths when the
+    -j option is used to strip the path.  zip.c (SMS) [3.1c01]
+ 7. Better handle "." and ".." on VMS.  vms/vmszip.c (SMS) [3.1a01]
+

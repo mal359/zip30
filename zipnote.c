@@ -303,10 +303,10 @@ local void version_info()
   puts("ZipNote special compilation options:");
   for (i = 0; (int)i < (int)(sizeof(comp_opts)/sizeof(char *) - 1); i++)
   {
-    printf("\t%s\n",comp_opts[i]);
+    printf("        %s\n",comp_opts[i]);
   }
   if (i == 0)
-      puts("\t[none]");
+      puts("        [none]");
 }
 
 

@@ -78,3 +78,9 @@
 #if !defined(NO_EF_UT_TIME) && !defined(USE_EF_UT_TIME)
 #  define USE_EF_UT_TIME
 #endif
+
+#ifdef __HAIKU__
+#  ifndef ZP_NEED_MEMCOMPR
+#    define ZP_NEED_MEMCOMPR
+#  endif
+#endif

@@ -38,8 +38,8 @@ BINFLAGS = 755
 MANFLAGS = 644
 
 # target directories - where to install executables and man pages to
-prefix = /usr/local
-BINDIR = $(prefix)/bin
+prefix = $PREFIX
+BINDIR ?= $(prefix)/bin
 MANEXT=1
 MANDIR = $(prefix)/man/man$(MANEXT)
 ZIPMANUAL = zip.txt

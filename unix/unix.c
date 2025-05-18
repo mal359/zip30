@@ -42,6 +42,13 @@
 #  endif
 #endif /* HAVE_DIRENT_H || _POSIX_VERSION */
 
+#ifdef __HAIKU__
+#  include <errno.h>
+#  include <fs_attr.h>
+#  include <Mime.h>
+#  include <ByteOrder.h>
+#endif /* __HAIKU__ */
+
 #ifdef __APPLE__
 #  include "unix/macosx.h"
 #endif /* def __APPLE__ */
@@ -549,6 +556,359 @@ ulg filetime(f, a, n, t)
 
 
 #ifndef QLZIP /* QLZIP Unix2QDOS cross-Zip supplies an extended variant */
+#ifdef __HAIKU__
+
+/* Set a file's MIME type. */
+#define BE_FILE_TYPE_NAME   "BEOS:TYPE"
+
+/* ---------------------------------------------------------------------- */
+/* Set a file's MIME type.                                                */
+void setfiletype( const char *file, const char *type )
+{
+    int fd;
+    attr_info fa;
+    ssize_t wrote_bytes;
+
+    fd = open( file, O_RDWR );
+    if( fd < 0 ) {
+        zipwarn( "can't open zipfile to write file type", "" );
+        return;
+    }
+
+    fa.type = B_MIME_STRING_TYPE;
+    fa.size = (off_t)(strlen( type ) + 1);
+
+    wrote_bytes = fs_write_attr( fd, BE_FILE_TYPE_NAME, fa.type, 0,
+                                 type, fa.size );
+    if( wrote_bytes != (ssize_t)fa.size ) {
+        zipwarn( "couldn't write complete file type", "" );
+    }
+
+    close( fd );
+}
+
+/* ----------------------------------------------------------------------
+
+Return a malloc()'d buffer containing all of the attributes and their names
+for the file specified in name.  You have to free() this yourself.  The length
+of the buffer is also returned.
+
+If get_attr_dir() fails, the buffer will be NULL, total_size will be 0,
+and an error will be returned:
+
+    ZE_OK    - no errors occurred
+    ZE_LOGIC - attr_buff was pointing at a buffer
+    ZE_MEM - insufficient memory for attribute buffer
+
+Other errors are possible (whatever is returned by the fs_attr.h functions).
+
+PROBLEMS:
+
+- pointers are 32-bits; attributes are limited to off_t in size so it's
+  possible to overflow... in practice, this isn't too likely... your
+  machine will thrash like hell before that happens
+
+*/
+
+#define INITIAL_BUFF_SIZE 65536
+
+int get_attr_dir( const char *name, char **attr_buff, off_t *total_size )
+{
+    int               retval = ZE_OK;
+    int               fd;
+    DIR              *fa_dir;
+    struct dirent    *fa_ent;
+    off_t             attrs_size;
+    off_t             this_size;
+    char             *ptr;
+    struct attr_info  fa_info;
+    struct attr_info  big_fa_info;
+
+    retval      = ZE_OK;
+    attrs_size  = 0;    /* gcc still says this is used uninitialized... */
+    *total_size = 0;
+
+    /* ----------------------------------------------------------------- */
+    /* Sanity-check.                                                     */
+    if( *attr_buff != NULL ) {
+        return ZE_LOGIC;
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* Can we open the file/directory?                                   */
+    /*                                                                   */
+    /* linkput is a zip global; it's set to 1 if we're storing symbolic  */
+    /* links as symbolic links (instead of storing the thing the link    */
+    /* points to)... if we're storing the symbolic link as a link, we'll */
+    /* want the link's file attributes, otherwise we want the target's.  */
+    if( linkput ) {
+        fd = open( name, O_RDONLY | O_NOTRAVERSE );
+    } else {
+        fd = open( name, O_RDONLY );
+    }
+    if( fd < 0 ) {
+        return errno;
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* Allocate an initial buffer; 64k should usually be enough.         */
+    *attr_buff = (char *)malloc( INITIAL_BUFF_SIZE );
+    ptr        = *attr_buff;
+    if( ptr == NULL ) {
+        close( fd );
+
+        return ZE_MEM;
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* Open the attributes directory for this file.                      */
+    fa_dir = fs_fopen_attr_dir( fd );
+    if( fa_dir == NULL ) {
+        close( fd );
+
+        free( ptr );
+        *attr_buff = NULL;
+
+        return retval;
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* Read all the attributes; the buffer could grow > 64K if there are */
+    /* many and/or they are large.                                       */
+    fa_ent = fs_read_attr_dir( fa_dir );
+    while( fa_ent != NULL ) {
+        uint32 attr_type;
+        uint64 attr_size;
+
+        retval = fs_stat_attr( fd, fa_ent->d_name, &fa_info );
+        /* TODO: check retval != ZE_OK */
+
+        this_size  = strlen( fa_ent->d_name ) + 1;
+        this_size += sizeof(uint32) + sizeof(uint64);
+        this_size += fa_info.size;
+
+        attrs_size += this_size;
+
+        if( attrs_size > INITIAL_BUFF_SIZE ) {
+            unsigned long offset = ptr - *attr_buff;
+
+            *attr_buff = (char *)realloc( *attr_buff, attrs_size );
+            if( *attr_buff == NULL ) {
+                retval = fs_close_attr_dir( fa_dir );
+                /* TODO: check retval != ZE_OK */
+                close( fd );
+
+                return ZE_MEM;
+            }
+
+            ptr = *attr_buff + offset;
+        }
+
+        /* Now copy the data for this attribute into the buffer. */
+        strcpy( ptr, fa_ent->d_name );
+        ptr += strlen( fa_ent->d_name );
+        *ptr++ = '\0';
+
+        /* the attr_info is stored in BigEndian because of PowerPC */
+        attr_type = B_HOST_TO_BENDIAN_INT32( fa_info.type );
+        attr_size = B_HOST_TO_BENDIAN_INT64( fa_info.size );
+        
+        memcpy( ptr, &attr_type, sizeof(uint32)); ptr += sizeof(uint32);
+        memcpy( ptr, &attr_size, sizeof(uint64)); ptr += sizeof(uint64);
+
+        if( fa_info.size > 0 ) {
+            ssize_t read_bytes;
+
+            read_bytes = fs_read_attr( fd, fa_ent->d_name, fa_info.type, 0,
+                                       ptr, fa_info.size );
+            if( read_bytes != fa_info.size ) {
+                /* print a warning about mismatched sizes */
+                char buff[80];
+
+                sprintf( buff, "read %ld, expected %ld",
+                         (ssize_t)read_bytes, (ssize_t)fa_info.size );
+                zipwarn( "attribute size mismatch: ", buff );
+            }
+
+            /* Wave my magic wand... this swaps all the Be types to big- */
+            /* endian automagically.                                     */
+            (void)swap_data( fa_info.type, ptr, fa_info.size,
+                             B_SWAP_HOST_TO_BENDIAN );
+
+            ptr += fa_info.size;
+        }
+
+        fa_ent = fs_read_attr_dir( fa_dir );
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* Close the attribute directory.                                    */
+    retval = fs_close_attr_dir( fa_dir );
+    /* TODO: check retval != ZE_OK */
+
+    /* ----------------------------------------------------------------- */
+    /* If the buffer is too big, shrink it.                              */
+    if( attrs_size < INITIAL_BUFF_SIZE ) {
+        *attr_buff = (char *)realloc( *attr_buff, attrs_size );
+        if( *attr_buff == NULL ) {
+            /* This really shouldn't happen... */
+            close( fd );
+
+            return ZE_MEM;
+        }
+    }
+
+    *total_size = attrs_size;
+
+    close( fd );
+
+    return ZE_OK;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Add a 'Be' extra field to the zlist data pointed to by z.              */
+
+#define EB_L_BE_LEN 5           /* min size is an unsigned long and flag */
+#define EB_C_BE_LEN 5           /* Length of data in local EF and flag.  */
+
+#define EB_BE_FL_NATURAL    0x01    /* data is 'natural' (not compressed) */
+
+#define EB_L_BE_SIZE    (EB_HEADSIZE + EB_L_BE_LEN) /* + attr size */
+#define EB_C_BE_SIZE    (EB_HEADSIZE + EB_C_BE_LEN)
+
+/* maximum memcompress overhead is the sum of the compression header length */
+/* (6 = ush compression type, ulg CRC) and the worstcase deflate overhead   */
+/* when uncompressible data are kept in 2 "stored" blocks (5 per block =    */
+/* byte blocktype + 2 * ush blocklength) */
+#define MEMCOMPRESS_OVERHEAD    (EB_MEMCMPR_HSIZ + EB_DEFLAT_EXTRA)
+
+local int add_Be_ef( struct zlist far *z )
+{
+    char *l_ef       = NULL;
+    char *c_ef       = NULL;
+    char *attrbuff   = NULL;
+    off_t attrsize   = 0;
+    char *compbuff   = NULL;
+    ulg   compsize   = 0;
+    uch   flags      = 0;
+
+    /* Check to make sure we've got enough room in the extra fields. */
+    if( z->ext + EB_L_BE_SIZE > USHRT_MAX ||
+        z->cext + EB_C_BE_SIZE > USHRT_MAX ) {
+        return ZE_MEM;
+    }
+
+    /* Attempt to load up a buffer full of the file's attributes. */
+    {
+        int retval;
+
+        retval = get_attr_dir( z->name, &attrbuff, &attrsize );
+        if( retval != ZE_OK ) {
+            return ZE_OPEN;
+        }
+        if( attrsize == 0 ) {
+            return ZE_OK;
+        }
+        if( attrbuff == NULL ) {
+            return ZE_LOGIC;
+        }
+
+        /* Check for way too much data. */
+        if( attrsize > OFF_MAX ) {
+            zipwarn( "uncompressed attributes truncated", "" );
+            attrsize = OFF_MAX - MEMCOMPRESS_OVERHEAD;
+        }
+    }
+
+    if( verbose ) {
+        printf( "\t[in=%lu]", (unsigned long)attrsize );
+    }
+
+    /* Try compressing the data */
+    compbuff = (char *)malloc( (size_t)attrsize + MEMCOMPRESS_OVERHEAD );
+    if( compbuff == NULL ) {
+        return ZE_MEM;
+    }
+    compsize = memcompress( compbuff,
+                            (size_t)attrsize + MEMCOMPRESS_OVERHEAD,
+                            attrbuff,
+                            (size_t)attrsize );
+    if( verbose ) {
+        printf( " [out=%u]", compsize );
+    }
+
+    /* Attempt to optimise very small attributes. */
+    if( compsize > attrsize ) {
+        free( compbuff );
+        compsize = (ush)attrsize;
+        compbuff = attrbuff;
+
+        flags = EB_BE_FL_NATURAL;
+    }
+
+    /* Check to see if we really have enough room in the EF for the data. */
+    if( ( z->ext + compsize + EB_L_BE_SIZE ) > USHRT_MAX ) {
+        zipwarn("not enough space in extra field for attributes\n", "");
+        free( compbuff );
+        return ZE_MEM;
+    }
+
+    /* Allocate memory for the local and central extra fields. */
+    if( z->extra && z->ext != 0 ) {
+        l_ef = (char *)realloc( z->extra, z->ext + EB_L_BE_SIZE + compsize );
+    } else {
+        l_ef = (char *)malloc( EB_L_BE_SIZE + compsize );
+        z->ext = 0;
+    }
+    if( l_ef == NULL ) {
+        return ZE_MEM;
+    }
+    z->extra = l_ef;
+    l_ef += z->ext;
+
+    if( z->cextra && z->cext != 0 ) {
+        c_ef = (char *)realloc( z->cextra, z->cext + EB_C_BE_SIZE );
+    } else {
+        c_ef = (char *)malloc( EB_C_BE_SIZE );
+        z->cext = 0;
+    }
+    if( c_ef == NULL ) {
+        return ZE_MEM;
+    }
+    z->cextra = c_ef;
+    c_ef += z->cext;
+
+    /* Now add the local version of the field. */
+    *l_ef++ = 'B';
+    *l_ef++ = 'e';
+    *l_ef++ = (char)(compsize + EB_L_BE_LEN);
+    *l_ef++ = (char)((compsize + EB_L_BE_LEN) >> 8);
+    *l_ef++ = (char)((unsigned long)attrsize);
+    *l_ef++ = (char)((unsigned long)attrsize >> 8);
+    *l_ef++ = (char)((unsigned long)attrsize >> 16);
+    *l_ef++ = (char)((unsigned long)attrsize >> 24);
+    *l_ef++ = flags;
+    memcpy( l_ef, compbuff, (size_t)compsize );
+
+    z->ext += EB_L_BE_SIZE + compsize;
+
+    /* And the central version. */
+    *c_ef++ = 'B';
+    *c_ef++ = 'e';
+    *c_ef++ = (char)(EB_C_BE_LEN);
+    *c_ef++ = (char)(EB_C_BE_LEN >> 8);
+    *c_ef++ = (char)compsize;
+    *c_ef++ = (char)(compsize >> 8);
+    *c_ef++ = (char)(compsize >> 16);
+    *c_ef++ = (char)(compsize >> 24);
+    *c_ef++ = flags;
+
+    z->cext += EB_C_BE_SIZE;
+
+    return ZE_OK;
+}
+
+#endif /* __HAIKU__ */
 
 int set_new_unix_extra_field(z, s)
   struct zlist far *z;
@@ -683,6 +1043,7 @@ int set_extra_field(z, z_utim)
   /* store full data in local header but just modification time stamp info
      in central header */
 {
+  int retval;
   z_stat s;
   char *name;
   size_t len = strlen(z->name);
@@ -793,7 +1154,13 @@ int set_extra_field(z, z_utim)
 #endif /* never */
 
   /* new unix extra field */
-  set_new_unix_extra_field(z, &s);
+  retval = set_new_unix_extra_field(z, &s);
+  if (retval != ZE_OK)
+      return retval;
+  
+  retval = add_Be_ef(z);
+  if (retval != ZE_OK)
+      return retval;
 
   return ZE_OK;
 }

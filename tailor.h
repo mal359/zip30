@@ -68,6 +68,12 @@
 #include "macos/osdep.h"
 #endif
 
+#ifdef __HAIKU__
+#undef local
+#include <sys/types.h>
+#define local static
+#endif
+
 #ifdef NLM
 #include "novell/osdep.h"
 #endif

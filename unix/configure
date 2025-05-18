@@ -18,6 +18,8 @@ trap "rm -f conftest* core a.out; exit 1" 1 2 3 15
 
 CC=${1-cc}
 CFLAGS=${2-"-I. -DUNIX"}
+CC_OMIT_ERR=" -Wno-implicit-function-declaration"
+CFLAGS="${CFLAGS} ${CC_OMIT_ERR}" 
 LFLAGS1=${LDFLAGS}
 LFLAGS2=''
 LN="ln -s"
@@ -210,9 +212,19 @@ int main()
   return 0;
 }
 _EOF_
-      $CC $CFLAGS -o conftest conftest.c -lbz2 > /dev/null 2>/dev/null
+      $CC $CFLAGS $LDFLAGS -o conftest conftest.c -lbz2 > /dev/null 2>/dev/null
       if test $? -eq 0; then
-        echo "-- OS supports bzip2 - linking in bzip2"
+        nm `$CC $CFLAGS $LDFLAGS -print-file-name=libbz2.a` | grep bz_internal_error > /dev/null
+        if test $? -eq 0; then
+          echo "-- OS supports bzip2 - linking in bzip2"
+        else
+          echo "    OS provides bzip2 library but not built with the" 
+          echo "      BZ_NO_STDIO option"
+          echo "    WARNING:  We recommend using a bzip2 library compiled"
+          echo "      with BZ_NO_STDIO defined for proper error handling"
+          echo "    Please see the Zip installation instructions"
+          echo "    Continuing anyway with standard bzip2 library..."
+        fi
         CFLAGS="${CFLAGS} -DBZIP2_SUPPORT"
         LFLAGS2="${LFLAGS2} -lbz2"
       else
@@ -382,7 +394,7 @@ int main()
 }
 _EOF_
 # compile it
-$CC -o conftest conftest.c >/dev/null 2>/dev/null
+$CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
   echo -- UID/GID test failed on compile - disabling old 16-bit UID/GID support
   CFLAGS="${CFLAGS} -DUIDGID_NOT_16BIT"
@@ -436,7 +448,7 @@ int main()
 }
 _EOF_
 # compile it
-$CC -o conftest conftest.c >/dev/null 2>/dev/null
+$CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
   echo -- no Large File Support
 else
@@ -478,7 +490,7 @@ int main()
 }
 _EOF_
 # compile it
-$CC -o conftest conftest.c >/dev/null 2>/dev/null
+$CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 # OCRCU8 is used by all utilities if Unicode is enabled
 # OCRCTB is only used by zipcloak
 if [ $? -ne 0 ]; then
@@ -518,16 +530,19 @@ $CC $CFLAGS -c conftest.c >/dev/null 2>/dev/null
 for func in rmdir strchr strrchr rename mktemp mktime mkstemp
 do
   echo Check for $func
-  echo "int main(){ $func(); return 0; }" > conftest.c
-  $CC $BFLAG -o conftest conftest.c >/dev/null 2>/dev/null
+  echo "extern $func(void); int main(){ $func(); return 0; }" > conftest.c
+  $CC $CC_OMIT_ERR $BFLAG -o conftest conftest.c >/dev/null 2>/dev/null
 # glibc-based systems do not need this
 # [ $? -ne 0 ] && CFLAGS="${CFLAGS} -DNO_`echo $func | tr '[a-z]' '[A-Z]'`"
 done
 
 
 echo Check for memset
-echo "int main(){ char k; memset(&k,0,0); return 0; }" > conftest.c
-$CC -o conftest conftest.c >/dev/null 2>/dev/null
+cat > conftest.c << _EOF_
+#include <string.h>
+int main(){ char k; memset(&k,0,0); return 0; }
+_EOF_
+$CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 # glibc-based systems do not need this
 # [ $? -ne 0 ] && CFLAGS="${CFLAGS} -DZMEM"
 
@@ -552,7 +567,7 @@ $CC -o conftest conftest.c >/dev/null 2>/dev/null
 echo Check for errno declaration
 cat > conftest.c << _EOF_
 #include <errno.h>
-main()
+int main()
 {
   errno = 0;
   return 0;
@@ -565,15 +580,17 @@ $CC $CFLAGS -c conftest.c >/dev/null 2>/dev/null
 
 echo Check for directory libraries
 cat > conftest.c << _EOF_
+#include <sys/types.h>
+#include <dirent.h>
 int main() { return closedir(opendir(".")); }
 _EOF_
 
-$CC -o conftest conftest.c >/dev/null 2>/dev/null
+$CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
   OPT=""
   for lib in ndir dir ucb bsd BSD PW x dirent
   do
-    $CC -o conftest conftest.c -l$lib >/dev/null 2>/dev/null
+    $CC $CC_OMIT_ERR -o conftest conftest.c -l$lib >/dev/null 2>/dev/null
     [ $? -eq 0 ] && OPT=-l$lib && break
   done
   # glibc-based systems do not need this
@@ -588,10 +605,13 @@ fi
 # Dynix/ptx 1.3 needed this
 
 echo Check for readlink
-echo "int main(){ return readlink(); }" > conftest.c
-$CC -o conftest conftest.c >/dev/null 2>/dev/null
+cat > conftest.c << _EOF_
+#include <unistd.h>
+int main(){ return readlink(); }
+_EOF_
+$CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
-  $CC -o conftest conftest.c -lseq >/dev/null 2>/dev/null
+  $CC $CC_OMIT_ERR -o conftest conftest.c -lseq >/dev/null 2>/dev/null
   [ $? -eq 0 ] && LFLAGS2="${LFLAGS2} -lseq"
 fi
 
@@ -699,7 +719,7 @@ rm -f a.out conftest.c conftest.o conftest null
 
 echo CC=\"${CC}\" CFLAGS=\"${CFLAGS}\"  CPP=\"${CPP}\" OBJA=\"${OBJA}\" \
        OCRCU8=\"${OCRCU8}\" OCRCTB=\"${OCRCTB}\" \
-       BINDIR=${BINDIR} MANDIR=${MANDIR} LFLAGS1=\"${LFLAGS1}\" \
+       BINDIR=${BINDIR} MANDIR=${MANDIR} LFLAGS1=\"${LFLAGS1} ${LD_OPTIONS}\" \
        LFLAGS2=\"${LFLAGS2}\" LN=\"${LN}\" \
        CC_BZ=\"${CC_BZ}\" CFLAGS_BZ=\"${CFLAGS_BZ}\" \
        IZ_BZIP2=\"${IZ_BZIP2}\" LIB_BZ=\"${LIB_BZ}\" > flags

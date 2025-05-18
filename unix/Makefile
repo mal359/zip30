@@ -22,7 +22,7 @@ SHELL = /bin/sh
 LN = ln -s
 
 # (to use the GNU compiler, change cc to gcc in CC)
-CC = cc
+CC ?= cc
 BIND = $(CC)
 AS = $(CC) -c
 CPP = /lib/cpp
@@ -228,7 +228,7 @@ cray_v3:
 
 # Cygwin
 cygwin:
-	$(MAKE) $(MAKEF) generic CC="gcc" CPP="gcc -E" EXE=".exe"
+	$(MAKE) $(MAKEF) generic CC="gcc" CPP="gcc -E" E=".exe"
 
 # LynxOS
 lynx:

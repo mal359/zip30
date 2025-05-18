@@ -334,6 +334,14 @@ int *pdosflag;          /* output: force MSDOS file attributes? */
   dosflag = dosify;     /* default for non-DOS and non-OS/2 */
 
   /* Find starting point in name before doing malloc */
+#ifdef __CYGWIN__
+  /* Strip drive specification */
+  t = *x && isascii((uch)*x) && *(x + 1) == ':' ? x + 2 : x;
+  /* Convert backslashes to slashes */
+  for (n = t; *n; n++)
+    if (*n == '\\')
+      *n = '/';
+#endif
   /* Strip "//host/share/" part of a UNC name */
   if (!strncmp(x,"//",2) && (x[2] != '\0' && x[2] != '/')) {
     n = x + 2;
@@ -346,8 +354,12 @@ int *pdosflag;          /* output: force MSDOS file attributes? */
     }
     if (*n != '\0')
       t = n + 1;
+#ifdef __CYGWIN__
+  } /* we may already have adjusted t */
+#else
   } else
       t = x;
+#endif
   while (*t == '/')
     t++;                /* strip leading '/' chars to get a relative path */
   while (*t == '.' && t[1] == '/')

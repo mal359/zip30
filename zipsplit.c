@@ -890,7 +890,11 @@ char **argv;            /* command line tokens */
       strcpy(name, INDEX);
       printf("creating: %s\n", path);
       indexmade = 1;
+#ifdef __CYGWIN__
+      if ((f = fopen(path, FOPW)) == NULL) /* cygwin fix: use FOPW */
+#else
       if ((f = fopen(path, "w")) == NULL)
+#endif
       {
         if (u && retry()) goto redobin;
         ziperr(ZE_CREAT, path);

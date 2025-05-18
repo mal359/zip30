@@ -1004,8 +1004,10 @@ int newname(name, flags, casesensitive)
     dosify = save_dosify;
     pathput = save_pathput;
   }
-  if ((zname = in2ex(iname)) == NULL)
+  if ((zname = in2ex(iname)) == NULL) {
+    if (undosm != NULL) free(undosm);
     return ZE_MEM;
+  }
 #ifdef UNICODE_SUPPORT
   /* Convert name to display or OEM name */
   oname = local_to_display_string(iname);
@@ -1030,7 +1032,7 @@ int newname(name, flags, casesensitive)
       z->mark = 1;
       if ((z->name = malloc(strlen(name_flsys) + 1 + PAD)) == NULL) {
         if (undosm != zname)
-          free((zvoid *)undosm);
+        free((zvoid *)undosm);
         free((zvoid *)iname);
         free((zvoid *)zname);
         return ZE_MEM;
@@ -1978,8 +1980,10 @@ int bfcopy(n)
 
       } else if (current_in_disk == total_disks - 1) {
         /* last disk is archive.zip */
+        if (split_path != NULL) free(split_path);
         if ((split_path = malloc(strlen(in_path) + 1)) == NULL) {
           zipwarn("reading archive: ", in_path);
+        free(split_path);
           return ZE_MEM;
         }
         strcpy(split_path, in_path);
@@ -2249,6 +2253,9 @@ int ask_for_split_read_path(current_disk)
       }
     }
     if (toupper(buf[0]) == 'Q') {
+      free(split_name);
+      free(split_dir);
+      free(archive_name);
       return ZE_ABORT;
     } else if ((fix == 1 || fix == 2) && toupper(buf[0]) == 'S') {
     /*
@@ -2258,6 +2265,9 @@ int ask_for_split_read_path(current_disk)
       if (buf[0] == 'y' || buf[0] == 'Y') {
     */
       skip_this_disk = current_in_disk + 1;
+      free(split_name);
+      free(split_dir);
+      free(archive_name);
       return ZE_FORM;
     } else if (toupper(buf[0]) == 'C') {
       fprintf(mesg, "\nEnter path where this split is (ENTER = same dir, . = current dir)");
@@ -2278,6 +2288,9 @@ int ask_for_split_read_path(current_disk)
       }
     } else if (fix == 2 && toupper(buf[0]) == 'E') {
       /* no more splits to read */
+      free(split_name);
+      free(split_dir);
+      free(archive_name);
       return ZE_EOF;
     } else if (fix == 2 && toupper(buf[0]) == 'Z') {
       total_disks = current_disk + 1;
@@ -3408,6 +3421,7 @@ char *wide_to_local_string(wide_string)
   char *buffer = NULL;
   char *local_string = NULL;
 
+  if (wide_string == NULL) return NULL;
   for (wsize = 0; wide_string[wsize]; wsize++) ;
 
   if (MAX_ESCAPE_BYTES > max_bytes)
@@ -3483,6 +3497,7 @@ char *wide_to_escape_string(wide_string)
   char *buffer = NULL;
   char *escape_string = NULL;
 
+  if (wide_string == NULL) return NULL;
   for (wsize = 0; wide_string[wsize]; wsize++) ;
 
   if ((buffer = (char *)malloc(wsize * MAX_ESCAPE_BYTES + 1)) == NULL) {

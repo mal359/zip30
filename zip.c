@@ -6066,5 +6066,6 @@ char **argv;            /* command line tokens */
 #if (!defined(VMS) && !defined(CMS_MVS))
   free((zvoid *) zipbuf);
 #endif /* !VMS && !CMS_MVS */
+  if (comment_stream != stderr) fclose(comment_stream);
   RETURN(finish(o ? ZE_OPEN : ZE_OK));
 }

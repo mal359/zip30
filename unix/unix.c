@@ -941,8 +941,10 @@ int set_new_unix_extra_field(z, s)
 
   if ((extra = (char *)malloc(z->ext + 4 + ef_data_size)) == NULL)
     return ZE_MEM;
-  if ((cextra = (char *)malloc(z->ext + 4 + ef_data_size)) == NULL)
+  if ((cextra = (char *)malloc(z->ext + 4 + ef_data_size)) == NULL) {
+    free(extra);
     return ZE_MEM;
+  }
 
   if (z->ext)
     memcpy(extra, z->extra, z->ext);

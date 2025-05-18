@@ -2265,11 +2265,19 @@ int readlocal(localz, z)
 
   /* Read file name, extra field and comment field */
   if ((locz->iname = malloc(locz->nam+1)) ==  NULL ||
-      (locz->ext && (locz->extra = malloc(locz->ext)) == NULL))
+      (locz->ext && (locz->extra = malloc(locz->ext)) == NULL)) {
+    if (locz->iname != NULL) free(locz->iname);
+    if (locz->extra != NULL) free(locz->extra);
+    free(locz);
     return ZE_MEM;
+  }
   if (fread(locz->iname, locz->nam, 1, in_file) != 1 ||
-      (locz->ext && fread(locz->extra, locz->ext, 1, in_file) != 1))
+      (locz->ext && fread(locz->extra, locz->ext, 1, in_file) != 1)) {
+    free(locz->iname);
+    free(locz->extra);
+    free(locz);
     return ferror(in_file) ? ZE_READ : ZE_EOF;
+  }
   locz->iname[z->nam] = '\0';                  /* terminate name */
 #ifdef UNICODE_SUPPORT
   if (unicode_mismatch != 3)
@@ -2283,8 +2291,12 @@ int readlocal(localz, z)
                         ((z->atx & 0xffff0000L) != 0), TRUE);
   }
 #endif
-  if ((locz->name = malloc(locz->nam+1)) ==  NULL)
+  if ((locz->name = malloc(locz->nam+1)) ==  NULL) {
+    free(locz->iname);
+    free(locz->extra);
+    free(locz);
     return ZE_MEM;
+  }
   strcpy(locz->name, locz->iname);
 
 #ifdef ZIP64_SUPPORT
@@ -3749,9 +3761,14 @@ local int scanzipf_fixnew()
           continue;
         }
         if ((cz->iname = malloc(cz->nam+1)) ==  NULL ||
-            (cz->cext && (cz->cextra = malloc(cz->cext + 1)) == NULL) ||
+            (cz->com && (cz->comment = malloc(cz->com + 1)) == NULL)) {
+          if (cz->iname != NULL) free(cz->iname);
+          if (cz->cextra != NULL) free(cz->cextra);
+          if (cz->comment != NULL) free(cz->comment);
+          free(cz);
             (cz->com && (cz->comment = malloc(cz->com + 1)) == NULL))
           return ZE_MEM;
+        }
         if (fread(cz->iname, cz->nam, 1, in_file) != 1 ||
             (cz->cext && fread(cz->cextra, cz->cext, 1, in_file) != 1) ||
             (cz->com && fread(cz->comment, cz->com, 1, in_file) != 1)) {
@@ -3874,6 +3891,10 @@ local int scanzipf_fixnew()
             fclose(in_file);
             in_file = NULL;
             zipwarn("writing archive seek: ", strerror(errno));
+            if (cz->iname != NULL) free(cz->iname);
+            if (cz->cextra != NULL) free(cz->cextra);
+            if (cz->comment != NULL) free(cz->comment);
+            free(cz);
             return ZE_WRITE;
           }
 
@@ -3884,6 +3905,10 @@ local int scanzipf_fixnew()
             fclose(in_file);
             in_file = NULL;
             zipwarn("write archive seek: ", strerror(errno));
+            if (cz->iname != NULL) free(cz->iname);
+            if (cz->cextra != NULL) free(cz->cextra);
+            if (cz->comment != NULL) free(cz->comment);
+            free(cz);
             return ZE_WRITE;
           }
           offset = zftello(y);
@@ -3891,6 +3916,10 @@ local int scanzipf_fixnew()
             fclose(in_file);
             in_file = NULL;
             zipwarn("seek after local: ", strerror(errno));
+            if (cz->iname != NULL) free(cz->iname);
+            if (cz->cextra != NULL) free(cz->cextra);
+            if (cz->comment != NULL) free(cz->comment);
+            free(cz);
             return ZE_WRITE;
           }
 
@@ -3943,6 +3972,8 @@ local int scanzipf_fixnew()
       fclose(in_file);
     in_file = NULL;
     free(split_path);
+
+    free(cz);
 
     if (r == ZE_EOF)
       /* user says no more splits */
@@ -4647,6 +4678,7 @@ local int scanzipf_regnew()
         result = ask_for_split_read_path(current_in_disk);
         if (result == ZE_ABORT) {
           zipwarn("could not find split: ", split_path);
+          free(split_path);
           return ZE_ABORT;
         } else if (result == ZE_FORM) {
           /* user asked to skip this disk */
@@ -4660,6 +4692,7 @@ local int scanzipf_regnew()
           /* last disk is archive.zip */
           if ((split_path = malloc(strlen(in_path) + 1)) == NULL) {
             zipwarn("reading archive: ", in_path);
+            free(split_path);
             return ZE_MEM;
           }
           strcpy(split_path, in_path);
@@ -4687,6 +4720,7 @@ local int scanzipf_regnew()
           fclose(in_file);
           in_file = NULL;
           zipwarn("unable to seek in input file ", split_path);
+          free(split_path);
           return ZE_READ;
         }
         first_CD = 0;
@@ -4742,6 +4776,7 @@ local int scanzipf_regnew()
           zipwarn("(try -F to attempt recovery)", "");
           fclose(in_file);
           in_file = NULL;
+          free(split_path);
           return ZE_FORM;
         }
       }
@@ -4783,12 +4818,14 @@ local int scanzipf_regnew()
           zipwarn("skipping this entry...", "");
           continue;
         } else {
+          free(split_path);
           return ferror(in_file) ? ZE_READ : ZE_EOF;
         }
       }
 
       if ((z = (struct zlist far *)farmalloc(sizeof(struct zlist))) == NULL) {
         zipwarn("reading central directory", "");
+        free(split_path);
         return ZE_MEM;
       }
 
@@ -4826,13 +4863,16 @@ local int scanzipf_regnew()
           continue;
         }
 #ifndef DEBUG
+        free(split_path);
         return ZE_FORM;
 #endif
       }
       if ((z->iname = malloc(z->nam+1)) ==  NULL ||
           (z->cext && (z->cextra = malloc(z->cext)) == NULL) ||
-          (z->com && (z->comment = malloc(z->com)) == NULL))
+          (z->com && (z->comment = malloc(z->com)) == NULL)) {
+        free(split_path);
         return ZE_MEM;
+      }
       if (fread(z->iname, z->nam, 1, in_file) != 1 ||
           (z->cext && fread(z->cextra, z->cext, 1, in_file) != 1) ||
           (z->com && fread(z->comment, z->com, 1, in_file) != 1)) {
@@ -4841,6 +4881,7 @@ local int scanzipf_regnew()
           zipwarn("skipping this entry...", "");
           continue;
         }
+        free(split_path);
         return ferror(in_file) ? ZE_READ : ZE_EOF;
       }
       z->iname[z->nam] = '\0';                  /* terminate name */
@@ -4851,6 +4892,7 @@ local int scanzipf_regnew()
           /* path is UTF-8 */
           if ((z->uname = malloc(strlen(z->iname) + 1)) == NULL) {
             zipwarn("could not allocate memory: scanzipf_reg", "");
+            free(split_path);
             return ZE_MEM;
           }
           strcpy(z->uname, z->iname);
@@ -4920,10 +4962,13 @@ local int scanzipf_regnew()
       z->trash = 0;
 #if defined(UNICODE_SUPPORT) && !defined(UTIL)
       z->zname = in2ex(z->iname);       /* convert to external name */
-      if (z->zname == NULL)
+      if (z->zname == NULL) {
+        free(split_path);
         return ZE_MEM;
+      }
       if ((z->name = malloc(strlen(z->zname) + 1)) == NULL) {
         zipwarn("could not allocate memory: scanzipf_reg", "");
+        free(split_path);
         return ZE_MEM;
       }
       strcpy(z->name, z->zname);
@@ -4951,6 +4996,7 @@ local int scanzipf_regnew()
             /* not able to convert name, so use iname */
             if ((name = malloc(strlen(z->iname) + 1)) == NULL) {
               zipwarn("could not allocate memory: scanzipf_reg", "");
+              free(split_path);
               return ZE_MEM;
             }
             strcpy(name, z->iname);
@@ -4962,6 +5008,7 @@ local int scanzipf_regnew()
 # else /* !EBCDIC */
           if ((z->zuname = malloc(strlen(name) + 1)) == NULL) {
             zipwarn("could not allocate memory: scanzipf_reg", "");
+            free(split_path);
             return ZE_MEM;
           }
           strcpy(z->zuname, name);
@@ -4975,6 +5022,7 @@ local int scanzipf_regnew()
             else {
               if ((z->ouname = malloc(strlen(name) + 1)) == NULL) {
                 zipwarn("could not allocate memory: scanzipf_reg", "");
+                free(split_path);
                 return ZE_MEM;
               }
               strcpy(z->ouname, name);
@@ -4982,6 +5030,7 @@ local int scanzipf_regnew()
           } else {
             if ((z->ouname = malloc(strlen(name) + 1)) == NULL) {
               zipwarn("could not allocate memory: scanzipf_reg", "");
+              free(split_path);
               return ZE_MEM;
             }
             strcpy(z->ouname, name);
@@ -4991,8 +5040,10 @@ local int scanzipf_regnew()
           if (!no_win32_wide) {
             z->inamew = utf8_to_wchar_string(z->uname);
             z->znamew = in2exw(z->inamew); /* convert to external name */
-            if (z->znamew == NULL)
+            if (z->znamew == NULL) {
+              free(split_path);
               return ZE_MEM;
+            }
           }
 
           local_to_oem_string(z->ouname, z->ouname);
@@ -5004,6 +5055,7 @@ local int scanzipf_regnew()
           */
           if ((z->wuname = malloc(strlen(z->ouname) + 1)) == NULL) {
             zipwarn("could not allocate memory: scanzipf_reg", "");
+            free(split_path);
             return ZE_MEM;
           }
           strcpy(z->wuname, z->ouname);
@@ -5017,6 +5069,7 @@ local int scanzipf_regnew()
             z->inamew = local_to_wchar_string(z->iname);
             z->znamew = in2exw(z->inamew); /* convert to external name */
             if (z->znamew == NULL)
+              free(split_path);
               return ZE_MEM;
           }
 # endif
@@ -5030,6 +5083,7 @@ local int scanzipf_regnew()
 /* z->zname is used for printing and must be coded in native charset */
       if ((z->zname = malloc(z->nam+1)) ==  NULL) {
         zipwarn("could not allocate memory: scanzipf_reg", "");
+        free(split_path);
         return ZE_MEM;
       }
       strtoebc(z->zname, z->iname);
@@ -5039,11 +5093,13 @@ local int scanzipf_regnew()
 # else /* !UTIL */
       z->zname = in2ex(z->iname);       /* convert to external name */
       if (z->zname == NULL)
+        free(split_path);
         return ZE_MEM;
       z->name = z->zname;
 # endif /* ?UTIL */
       if ((z->oname = malloc(strlen(z->zname) + 1)) == NULL) {
         zipwarn("could not allocate memory: scanzipf_reg", "");
+        free(split_path);
         return ZE_MEM;
       }
       strcpy(z->oname, z->zname);
@@ -6140,6 +6196,7 @@ int zipcopy(z)
       sprintf(errbuf, "Illegal host system mapping in local header:  %d", os);
       zipwarn(errbuf, "");
       zipwarn("Skipping:  ", z->iname);
+      free(localz);
       return ZE_FORM;
     }
     /* PK Version - currently 10 - 62 (AppNote 6.2.2) */
@@ -6153,6 +6210,7 @@ int zipcopy(z)
       sprintf(errbuf, "Illegal PK version mapping in local header:  %d", pkver);
       zipwarn(errbuf, "");
       zipwarn("Skipping:  ", z->iname);
+      free(localz);
       return ZE_FORM;
     }
     /* Currently compression method is defined as 0 - 19 and 98 (AppNote 6.3) */
@@ -6162,6 +6220,7 @@ int zipcopy(z)
       sprintf(errbuf, "Unrecognized compression method in local header:  %d", localz->how);
       zipwarn(errbuf, "");
       zipwarn("Skipping:  ", z->iname);
+      free(localz);
       return ZE_FORM;
     }
 
@@ -6177,14 +6236,26 @@ int zipcopy(z)
 
   /* Read file name, extra field and comment field */
   if ((localz->iname = malloc(localz->nam+1)) ==  NULL ||
-      (localz->ext && (localz->extra = malloc(localz->ext)) == NULL))
+      (localz->ext && (localz->extra = malloc(localz->ext)) == NULL)) {
+    if (localz->iname != NULL) free(localz->iname);
+    if (localz->extra != NULL) free(localz->extra);
+    free(localz);
     return ZE_MEM;
+  }
   if (fread(localz->iname, localz->nam, 1, in_file) != 1 ||
-      (localz->ext && fread(localz->extra, localz->ext, 1, in_file) != 1))
+      (localz->ext && fread(localz->extra, localz->ext, 1, in_file) != 1)) {
+    free(localz->iname);
+    free(localz->extra);
+    free(localz);
     return ferror(in_file) ? ZE_READ : ZE_EOF;
+  }
   localz->iname[localz->nam] = '\0';                  /* terminate name */
-  if ((localz->name = malloc(localz->nam+1)) ==  NULL)
+  if ((localz->name = malloc(localz->nam+1)) ==  NULL) {
+    free(localz->iname);
+    free(localz->extra);
+    free(localz);
     return ZE_MEM;
+  }
   strcpy(localz->name, localz->iname);
 
 #ifdef ZIP64_SUPPORT

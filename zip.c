@@ -2233,8 +2233,12 @@ char **argv;            /* command line tokens */
       loc = setlocale(LC_CTYPE, NULL);
       printf("  Initial language locale = '%s'\n", loc);
     */
-
+	
+#ifdef MAEMO
+    loc = setlocale(LC_CTYPE, "");
+#else
     loc = setlocale(LC_CTYPE, "en_US.UTF-8");
+#endif
 
     /*
       printf("langinfo %s\n", nl_langinfo(CODESET));

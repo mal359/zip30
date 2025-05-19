@@ -452,18 +452,48 @@ $CC $CC_OMIT_ERR -o conftest conftest.c >/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
   echo -- no Large File Support
 else
-# run it
-  ./conftest
-  r=$?
-  if [ $r -eq 1 ]; then
+  cat > conftest.c << _EOF_
+# define _LARGEFILE_SOURCE       /* some OSes need this for fseeko */
+# define _LARGEFILE64_SOURCE
+# define _FILE_OFFSET_BITS 64       /* select default interface as 64 bit */
+# define _LARGE_FILES        /* some OSes need this for 64-bit off_t */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <stdio.h>
+int main()
+{
+  int check[1 - 2 * (sizeof(off_t) < 8)] = {};
+  return check[0];
+}
+_EOF_
+  $CC -o conftest conftest.c >/dev/null 2>/dev/null
+  if [ $? -ne 0 ]; then
     echo -- no Large File Support - no 64-bit off_t
-  elif [ $r -eq 2 ]; then
-    echo -- no Large File Support - no 64-bit stat
-  elif [ $r -eq 3 ]; then
-    echo -- yes we have Large File Support!
-    CFLAGS="${CFLAGS} -DLARGE_FILE_SUPPORT"
   else
-    echo -- no Large File Support - conftest returned $r
+    cat > conftest.c << _EOF_
+# define _LARGEFILE_SOURCE       /* some OSes need this for fseeko */
+# define _LARGEFILE64_SOURCE
+# define _FILE_OFFSET_BITS 64       /* select default interface as 64 bit */
+# define _LARGE_FILES        /* some OSes need this for 64-bit off_t */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <stdio.h>
+int main()
+{
+  struct stat s;
+  int check[1 - 2 * (sizeof(s.st_size) < 8)] = {};
+  return check[0];
+}
+_EOF_
+    $CC -o conftest conftest.c >/dev/null 2>/dev/null
+    if [ $? -ne 0 ]; then
+      echo -- no Large File Support - no 64-bit stat
+    else
+      echo -- yes we have Large File Support!
+      CFLAGS="${CFLAGS} -DLARGE_FILE_SUPPORT"
+    fi
   fi
 fi
 

@@ -3625,7 +3625,7 @@ char *utf8_to_escape_string(utf8_string)
 zwchar *local_to_wide_string(local_string)
   char *local_string;
 {
-  int wsize;
+  size_t wsize, n;
   wchar_t *wc_string;
   zwchar *wide_string;
 
@@ -3640,15 +3640,18 @@ zwchar *local_to_wide_string(local_string)
   if ((wc_string = (wchar_t *)malloc((wsize + 1) * sizeof(wchar_t))) == NULL) {
     ZIPERR(ZE_MEM, "local_to_wide_string");
   }
-  wsize = mbstowcs(wc_string, local_string, wsize + 1);
-  wc_string[wsize] = (wchar_t) 0;
+  n = mbstowcs(wc_string, local_string, wsize + 1);
+  if (n != wsize) {
+    ZIPERR(ZE_LOGIC, "mbstowcs");
+  }
 
   /* in case wchar_t is not zwchar */
   if ((wide_string = (zwchar *)malloc((wsize + 1) * sizeof(zwchar))) == NULL) {
     ZIPERR(ZE_MEM, "local_to_wide_string");
   }
-  for (wsize = 0; (wide_string[wsize] = (zwchar)wc_string[wsize]); wsize++) ;
-  wide_string[wsize] = (zwchar)0;
+  for (n = 0; n < wsize + 1; n++) {
+    wide_string[n] = (zwchar)wc_string[n];
+  }
   free(wc_string);
 
   return wide_string;

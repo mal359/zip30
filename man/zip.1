@@ -366,6 +366,13 @@ exclusively on entries in an existing archive.
 Update existing entries and add new files.  If the archive does not exist
 create it.  This is the default mode.
 .TP
+.BI copy\ \fP(\fB\-U\fP)
+Select entries in an existing archive and copy them to a new archive.
+This new mode is similar to \fBupdate\fP but command line patterns
+select entries in the existing archive rather than files from
+the file system and it uses the \fB\-\-out\fP option to write the
+resulting archive to a new file rather than update the existing
+archive, leaving the original archive unchanged.
 .BI update\ \fP(\fB\-u\fP)
 Update existing entries if newer on the file system and add new files.  If
 the archive does not exist issue warning then create a new archive.
@@ -377,13 +384,6 @@ Does not add new files to the archive.
 .BI delete\ \fP(\fB\-d\fP)
 Select entries in an existing archive and delete them.
 .TP
-.BI copy\ \fP(\fB\-U\fP)
-Select entries in an existing archive and copy them to a new archive.
-This new mode is similar to \fBupdate\fP but command line patterns
-select entries in the existing archive rather than files from
-the file system and it uses the \fB\-\-out\fP option to write the
-resulting archive to a new file rather than update the existing
-archive, leaving the original archive unchanged.
 .LP
 The new File Sync option (\fB\-FS\fP) is also considered a new mode,
 though it is similar to \fBupdate\fP.  This mode synchronizes the
